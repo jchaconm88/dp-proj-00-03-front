@@ -86,14 +86,25 @@ jobs:
 
       - name: Deploy to Firebase Hosting
         id: deploy
+        env:
+          FIREBASE_HOSTING_SITE: ${{ secrets.FIREBASE_HOSTING_SITE }}
         run: |
-          npx firebase-tools deploy --only hosting --project ${{ secrets.FIREBASE_PROJECT_ID }} --token ${{ secrets.FIREBASE_TOKEN }} --non-interactive
+          if [ -z "$FIREBASE_HOSTING_SITE" ]; then
+            echo "Falta el secret FIREBASE_HOSTING_SITE (terraform output -raw firebase_hosting_site)"
+            exit 1
+          fi
+          npx firebase-tools deploy \
+            --only "hosting:${FIREBASE_HOSTING_SITE}" \
+            --project ${{ secrets.FIREBASE_PROJECT_ID }} \
+            --non-interactive
         timeout-minutes: 5
 
       - name: Health check post-deploy
         id: health_check
+        env:
+          FIREBASE_HOSTING_SITE: ${{ secrets.FIREBASE_HOSTING_SITE }}
         run: |
-          URL="https://dp-proj-00-03-front.web.app/api/health-check"
+          URL="https://${FIREBASE_HOSTING_SITE}.web.app/api/health-check"
           for i in $(seq 1 6); do
             status=$(curl -s -o /dev/null -w "%{http_code}" "$URL" || echo "000")
             if [ "$status" = "200" ] || [ "$status" = "404" ]; then
@@ -112,5 +123,8 @@ jobs:
         run: |
           echo "Rollback: restaurando versión anterior..."
           # Firebase Hosting guarda el historial de releases
-          npx firebase-tools hosting:rollback --project ${{ secrets.FIREBASE_PROJECT_ID }} --token ${{ secrets.FIREBASE_TOKEN }} --non-interactive
+          npx firebase-tools hosting:rollback \
+            --site "${{ secrets.FIREBASE_HOSTING_SITE }}" \
+            --project ${{ secrets.FIREBASE_PROJECT_ID }} \
+            --non-interactive
         timeout-minutes: 5

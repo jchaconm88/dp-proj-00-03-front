@@ -93,9 +93,9 @@ Configurar en **Settings → Secrets and variables → Actions** del repo `dp-pr
 |--------|-----|-----|
 | `CMS_URL` | test (build) | URL pública del CMS en producción. |
 | `TURNSTILE_SITE_KEY` | test (build) | Clave pública Turnstile. |
-| `GCP_SA_KEY` | deploy | JSON de la cuenta de servicio de deploy (misma SA que infra/back: `terraform output -raw ci_deployer_service_account_email` → clave en GCP IAM). |
+| `GCP_SA_KEY` | deploy | JSON de la cuenta de servicio de deploy (misma SA que infra/back: `terraform output -raw ci_deployer_service_account_email` → clave en GCP IAM). Autentica Firebase CLI vía `GOOGLE_APPLICATION_CREDENTIALS`. |
 | `FIREBASE_PROJECT_ID` | deploy | Proyecto GCP del bloque (`terraform output -raw gcp_project_id`). |
-| `FIREBASE_TOKEN` | deploy | Token CI: `firebase login:ci`. |
+| `FIREBASE_HOSTING_SITE` | deploy | ID del sitio Hosting (`terraform output -raw firebase_hosting_site`). Ej.: `dp-proj-00-03-a1b2-front`. **No** uses `dp-proj-00-03-front` salvo que coincida con Terraform. |
 
 **Recomendado añadir también** al paso `pnpm build` del workflow (hoy solo inyecta `CMS_URL` y `TURNSTILE_SITE_KEY`):
 
@@ -123,7 +123,8 @@ export WEBHOOK_SECRET=...
 export TURNSTILE_SITE_KEY=...
 export TURNSTILE_SECRET_KEY=...
 pnpm build
-firebase deploy --only hosting --project <FIREBASE_PROJECT_ID>
+firebase deploy --only hosting:<FIREBASE_HOSTING_SITE> --project <FIREBASE_PROJECT_ID>
+# FIREBASE_HOSTING_SITE: terraform output -raw firebase_hosting_site
 ```
 
 Guía general: [`GUIA-OPERACION.md`](../GUIA-OPERACION.md) (Parte 2: Desplegar).
