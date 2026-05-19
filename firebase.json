@@ -1,6 +1,6 @@
 {
   "hosting": {
-    "site": "dp-proj-00-03-front",
+    "site": "dp-proj-00-03-REPLACE-SUFFIX-front",
     "public": "dist/client",
     "ignore": ["firebase.json", "**/.*", "**/node_modules/**"],
     "rewrites": [

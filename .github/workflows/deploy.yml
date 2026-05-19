@@ -84,8 +84,7 @@ jobs:
         with:
           node-version: '22'
 
-      - name: Deploy to Firebase Hosting
-        id: deploy
+      - name: Configure firebase.json (Hosting site)
         env:
           FIREBASE_HOSTING_SITE: ${{ secrets.FIREBASE_HOSTING_SITE }}
         run: |
@@ -93,8 +92,16 @@ jobs:
             echo "Falta el secret FIREBASE_HOSTING_SITE (terraform output -raw firebase_hosting_site)"
             exit 1
           fi
+          # firebase-tools exige que hosting.site en firebase.json coincida con el sitio del proyecto
+          jq --arg site "$FIREBASE_HOSTING_SITE" '.hosting.site = $site' firebase.json > firebase.tmp.json
+          mv firebase.tmp.json firebase.json
+          echo "firebase.json → hosting.site=$(jq -r '.hosting.site' firebase.json)"
+
+      - name: Deploy to Firebase Hosting
+        id: deploy
+        run: |
           npx firebase-tools deploy \
-            --only "hosting:${FIREBASE_HOSTING_SITE}" \
+            --only hosting \
             --project ${{ secrets.FIREBASE_PROJECT_ID }} \
             --non-interactive
         timeout-minutes: 5
@@ -120,11 +127,14 @@ jobs:
 
       - name: Rollback on failure
         if: failure() && steps.deploy.outcome == 'failure'
+        env:
+          FIREBASE_HOSTING_SITE: ${{ secrets.FIREBASE_HOSTING_SITE }}
         run: |
           echo "Rollback: restaurando versión anterior..."
-          # Firebase Hosting guarda el historial de releases
+          jq --arg site "$FIREBASE_HOSTING_SITE" '.hosting.site = $site' firebase.json > firebase.tmp.json
+          mv firebase.tmp.json firebase.json
           npx firebase-tools hosting:rollback \
-            --site "${{ secrets.FIREBASE_HOSTING_SITE }}" \
+            --site "$FIREBASE_HOSTING_SITE" \
             --project ${{ secrets.FIREBASE_PROJECT_ID }} \
             --non-interactive
         timeout-minutes: 5

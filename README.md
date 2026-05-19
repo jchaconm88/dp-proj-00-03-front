@@ -123,8 +123,9 @@ export WEBHOOK_SECRET=...
 export TURNSTILE_SITE_KEY=...
 export TURNSTILE_SECRET_KEY=...
 pnpm build
-firebase deploy --only hosting:<FIREBASE_HOSTING_SITE> --project <FIREBASE_PROJECT_ID>
-# FIREBASE_HOSTING_SITE: terraform output -raw firebase_hosting_site
+# Ajustar hosting.site en firebase.json (debe coincidir con Terraform):
+# jq --arg site "$(cd ../dp-proj-00-03-infra && terraform output -raw firebase_hosting_site)" '.hosting.site = $site' firebase.json
+firebase deploy --only hosting --project <FIREBASE_PROJECT_ID>
 ```
 
 Guía general: [`GUIA-OPERACION.md`](../GUIA-OPERACION.md) (Parte 2: Desplegar).
