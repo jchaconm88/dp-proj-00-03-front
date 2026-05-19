@@ -40,46 +40,23 @@ jobs:
         run: pnpm test -- tests/integration
 
       - name: Build
-        id: build
         run: pnpm build
         env:
           CMS_URL: ${{ secrets.CMS_URL }}
           TURNSTILE_SITE_KEY: ${{ secrets.TURNSTILE_SITE_KEY }}
-
-      - name: Upload build artifact
-        if: github.ref == 'refs/heads/main'
-        uses: actions/upload-artifact@v4
-        with:
-          name: dist
-          path: dist/
-          retention-days: 1
+          WEBHOOK_SECRET: ${{ secrets.WEBHOOK_SECRET }}
+          TURNSTILE_SECRET_KEY: ${{ secrets.TURNSTILE_SECRET_KEY }}
 
   deploy:
     name: Deploy to Firebase Hosting
     needs: test
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 15
     if: github.ref == 'refs/heads/main' && github.event_name == 'push'
     environment: production
 
     steps:
       - uses: actions/checkout@v4
-
-      - name: Download build artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: dist
-          # El artefacto ya incluye la carpeta dist/; path "." → ./dist/client (no dist/dist/client)
-          path: .
-
-      - name: Verify build output
-        run: |
-          test -d dist/client || (echo "Falta dist/client tras descargar el artefacto:" && ls -laR dist 2>/dev/null || ls -la && exit 1)
-
-      - name: Authenticate to GCP
-        uses: google-github-actions/auth@v2
-        with:
-          credentials_json: ${{ secrets.GCP_SA_KEY }}
 
       - uses: pnpm/action-setup@v3
         with:
@@ -88,6 +65,32 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
+          cache: 'pnpm'
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Build for production
+        run: pnpm build
+        env:
+          CMS_URL: ${{ secrets.CMS_URL }}
+          TURNSTILE_SITE_KEY: ${{ secrets.TURNSTILE_SITE_KEY }}
+          WEBHOOK_SECRET: ${{ secrets.WEBHOOK_SECRET }}
+          TURNSTILE_SECRET_KEY: ${{ secrets.TURNSTILE_SECRET_KEY }}
+
+      - name: Verify build output
+        run: |
+          mkdir -p dist/client
+          if [ ! "$(ls -A dist/client 2>/dev/null)" ]; then
+            echo "dist/client vacío (solo SSR); creando marcador para Firebase Hosting"
+            touch dist/client/.gitkeep
+          fi
+          test -d dist/server || (echo "Falta dist/server (adapter Node)" && exit 1)
+          ls -laR dist
+
+      - name: Authenticate to GCP
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
 
       - name: Configure firebase.json (Hosting site)
         env:
@@ -97,7 +100,6 @@ jobs:
             echo "Falta el secret FIREBASE_HOSTING_SITE (terraform output -raw firebase_hosting_site)"
             exit 1
           fi
-          # firebase-tools exige que hosting.site en firebase.json coincida con el sitio del proyecto
           jq --arg site "$FIREBASE_HOSTING_SITE" '.hosting.site = $site' firebase.json > firebase.tmp.json
           mv firebase.tmp.json firebase.json
           echo "firebase.json → hosting.site=$(jq -r '.hosting.site' firebase.json)"
@@ -116,11 +118,10 @@ jobs:
         env:
           FIREBASE_HOSTING_SITE: ${{ secrets.FIREBASE_HOSTING_SITE }}
         run: |
-          URL="https://${FIREBASE_HOSTING_SITE}.web.app/api/health-check"
+          URL="https://${FIREBASE_HOSTING_SITE}.web.app/api/health"
           for i in $(seq 1 6); do
             status=$(curl -s -o /dev/null -w "%{http_code}" "$URL" || echo "000")
             if [ "$status" = "200" ] || [ "$status" = "404" ]; then
-              # 404 es aceptable (dominio de prueba sin tenant configurado)
               echo "Deploy verificado OK (status: $status)"
               exit 0
             fi
