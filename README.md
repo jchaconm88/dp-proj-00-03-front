@@ -56,6 +56,16 @@ cp .env.example .env.local
 pnpm dev
 ```
 
+### Dev vs preview (build de producción)
+
+| Comando | Cuándo | Multi-dominio local |
+|---------|--------|---------------------|
+| `pnpm dev` | Desarrollo diario | `http://mi-cliente.local:4321/...` (entrada en `hosts`) |
+| `pnpm build && pnpm preview` | Probar el build SSR | Misma URL; deja la terminal de preview **abierta** |
+| `pnpm build && pnpm start` | Servidor Node (`dist/server`) | `HOST=0.0.0.0 PORT=4321` si hace falta en Windows |
+
+Si `curl` a `127.0.0.1:4321` falla pero `localhost` respondía antes, suele ser que **no hay proceso escuchando** (cerraste `preview`) o el servidor solo estaba en `localhost` — `astro.config.mjs` usa `server.host: '0.0.0.0'` para dev y preview.
+
 Edita `.env.local` según la tabla de [Variables de entorno](#variables-de-entorno).
 
 ## Variables de entorno
@@ -93,9 +103,21 @@ Configurar en **Settings → Secrets and variables → Actions** del repo `dp-pr
 |--------|-----|-----|
 | `CMS_URL` | test (build) | URL pública del CMS en producción. |
 | `TURNSTILE_SITE_KEY` | test (build) | Clave pública Turnstile. |
-| `GCP_SA_KEY` | deploy | JSON de la cuenta de servicio de deploy (misma SA que infra/back: `terraform output -raw ci_deployer_service_account_email` → clave en GCP IAM). Autentica Firebase CLI vía `GOOGLE_APPLICATION_CREDENTIALS`. |
-| `FIREBASE_PROJECT_ID` | deploy | Proyecto GCP del bloque (`terraform output -raw gcp_project_id`). |
-| `FIREBASE_HOSTING_SITE` | deploy | ID del sitio Hosting (`terraform output -raw firebase_hosting_site`). Ej.: `dp-proj-00-03-a1b2-front`. **No** uses `dp-proj-00-03-front` salvo que coincida con Terraform. |
+| `GCP_SA_KEY` | deploy | JSON de la cuenta de servicio de deploy (misma SA que infra/back). |
+| `GCP_PROJECT_ID` | deploy | Proyecto GCP del bloque. |
+| `GCP_REGION` | deploy | Región Cloud Run y rewrite Firebase (`us-central1`). |
+| `FIREBASE_PROJECT_ID` | deploy | Igual que `GCP_PROJECT_ID`. |
+| `FIREBASE_HOSTING_SITE` | deploy | `terraform output -raw firebase_hosting_site`. |
+
+Detalle: [`.github/SECRETS.md`](./.github/SECRETS.md).
+
+### Producción (arquitectura)
+
+```
+Visitante → Firebase Hosting (dist/client + CDN)
+         → rewrite ** → Cloud Run dp-proj-00-03-front (Astro SSR, dist/server)
+         → Payload CMS (Cloud Run)
+```
 
 **Recomendado añadir también** al paso `pnpm build` del workflow (hoy solo inyecta `CMS_URL` y `TURNSTILE_SITE_KEY`):
 
@@ -122,10 +144,9 @@ export CMS_URL=https://tu-cms.run.app
 export WEBHOOK_SECRET=...
 export TURNSTILE_SITE_KEY=...
 export TURNSTILE_SECRET_KEY=...
-pnpm build
-# Ajustar hosting.site en firebase.json (debe coincidir con Terraform):
-# jq --arg site "$(cd ../dp-proj-00-03-infra && terraform output -raw firebase_hosting_site)" '.hosting.site = $site' firebase.json
-firebase deploy --only hosting --project <FIREBASE_PROJECT_ID>
+# Producción: usar CI (recomendado) o manualmente:
+# docker build + gcloud run deploy dp-proj-00-03-front + firebase deploy --only hosting
+# Ver .github/SECRETS.md y .github/workflows/deploy.yml
 ```
 
 Guía general: [`GUIA-OPERACION.md`](../GUIA-OPERACION.md) (Parte 2: Desplegar).

@@ -9,10 +9,12 @@ export default defineConfig({
     mode: 'standalone',
   }),
 
-  // Servidor de desarrollo
+  // Dev y preview (SSR Node) comparten server.* — Req multi-dominio en local
+  // host: true en preview se convierte en undefined y el adapter escucha solo "localhost";
+  // en Windows/Git Bash 127.0.0.1 y mi-cliente.local fallan. Usar 0.0.0.0 explícito.
   server: {
     port: 4321,
-    host: true,
+    host: '0.0.0.0',
   },
 
   // Optimizacion de imagenes

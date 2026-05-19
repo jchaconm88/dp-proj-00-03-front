@@ -6,7 +6,10 @@
     "rewrites": [
       {
         "source": "**",
-        "function": "ssrHandler"
+        "run": {
+          "serviceId": "dp-proj-00-03-front",
+          "region": "REPLACE_REGION"
+        }
       }
     ],
     "headers": [

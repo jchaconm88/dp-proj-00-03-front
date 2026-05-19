@@ -17,6 +17,7 @@ const tenantResolver = defineMiddleware(async (context, next) => {
 
   // Rutas internas no requieren resolución de tenant
   const isInternalRoute =
+    context.url.pathname === '/api/health' ||
     context.url.pathname.startsWith('/api/webhooks') ||
     context.url.pathname.startsWith('/_astro') ||
     context.url.pathname === '/favicon.ico'

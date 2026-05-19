@@ -1,0 +1,11 @@
+node_modules
+dist
+.astro
+.git
+.github
+coverage
+*.md
+.env
+.env.*
+!.env.example
+tests

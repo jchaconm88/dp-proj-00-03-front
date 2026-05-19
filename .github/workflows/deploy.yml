@@ -10,6 +10,10 @@ concurrency:
   group: frontend-${{ github.ref }}
   cancel-in-progress: false
 
+env:
+  REGISTRY: ${{ secrets.GCP_REGION }}-docker.pkg.dev
+  IMAGE_NAME: ${{ secrets.GCP_PROJECT_ID }}/dp-proj-00-03-front/front
+
 jobs:
   test:
     name: Tests & Build
@@ -47,11 +51,68 @@ jobs:
           WEBHOOK_SECRET: ${{ secrets.WEBHOOK_SECRET }}
           TURNSTILE_SECRET_KEY: ${{ secrets.TURNSTILE_SECRET_KEY }}
 
-  deploy:
-    name: Deploy to Firebase Hosting
+  build-and-push:
+    name: Build & Push Docker image
     needs: test
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 20
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    outputs:
+      digest: ${{ steps.build.outputs.digest }}
+      previous_image: ${{ steps.current_revision.outputs.image }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Authenticate to GCP
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+
+      - name: Setup Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Configure Docker for Artifact Registry
+        run: gcloud auth configure-docker ${{ env.REGISTRY }}
+
+      - name: Get current Cloud Run revision (rollback)
+        id: current_revision
+        run: |
+          image=$(gcloud run services describe dp-proj-00-03-front \
+            --region="${{ secrets.GCP_REGION }}" \
+            --format='value(spec.template.spec.containers[0].image)' \
+            2>/dev/null || echo "")
+          echo "image=$image" >> "$GITHUB_OUTPUT"
+
+      - name: Docker metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          tags: |
+            type=sha,prefix=sha-,format=long
+            type=raw,value=latest,enable={{is_default_branch}}
+
+      - name: Build and push
+        id: build
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          build-args: |
+            CMS_URL=${{ secrets.CMS_URL }}
+            TURNSTILE_SITE_KEY=${{ secrets.TURNSTILE_SITE_KEY }}
+            WEBHOOK_SECRET=${{ secrets.WEBHOOK_SECRET }}
+            TURNSTILE_SECRET_KEY=${{ secrets.TURNSTILE_SECRET_KEY }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  deploy:
+    name: Deploy Cloud Run + Firebase Hosting
+    needs: build-and-push
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
     if: github.ref == 'refs/heads/main' && github.event_name == 'push'
     environment: production
 
@@ -69,7 +130,7 @@ jobs:
 
       - run: pnpm install --frozen-lockfile
 
-      - name: Build for production
+      - name: Build static client for Firebase Hosting CDN
         run: pnpm build
         env:
           CMS_URL: ${{ secrets.CMS_URL }}
@@ -77,70 +138,104 @@ jobs:
           WEBHOOK_SECRET: ${{ secrets.WEBHOOK_SECRET }}
           TURNSTILE_SECRET_KEY: ${{ secrets.TURNSTILE_SECRET_KEY }}
 
-      - name: Verify build output
+      - name: Verify dist/client
         run: |
           mkdir -p dist/client
           if [ ! "$(ls -A dist/client 2>/dev/null)" ]; then
-            echo "dist/client vacío (solo SSR); creando marcador para Firebase Hosting"
             touch dist/client/.gitkeep
           fi
-          test -d dist/server || (echo "Falta dist/server (adapter Node)" && exit 1)
-          ls -laR dist
 
       - name: Authenticate to GCP
         uses: google-github-actions/auth@v2
         with:
           credentials_json: ${{ secrets.GCP_SA_KEY }}
 
-      - name: Configure firebase.json (Hosting site)
+      - name: Resolve container image
+        id: image
+        run: |
+          IMAGE="${{ secrets.GCP_REGION }}-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/dp-proj-00-03-front/front@${{ needs.build-and-push.outputs.digest }}"
+          echo "uri=$IMAGE" >> "$GITHUB_OUTPUT"
+
+      - name: Deploy to Cloud Run
+        id: cloudrun
+        run: |
+          gcloud run deploy dp-proj-00-03-front \
+            --region="${{ secrets.GCP_REGION }}" \
+            --image="${{ steps.image.outputs.uri }}" \
+            --port=8080 \
+            --memory=512Mi \
+            --cpu=1 \
+            --cpu-boost \
+            --timeout=60 \
+            --service-account=dp-proj-00-03-front@${{ secrets.GCP_PROJECT_ID }}.iam.gserviceaccount.com \
+            --update-labels=managed-by=github-actions,commit-sha=${{ github.sha }} \
+            --quiet
+          URL=$(gcloud run services describe dp-proj-00-03-front \
+            --region="${{ secrets.GCP_REGION }}" \
+            --format='value(status.url)')
+          echo "url=$URL" >> "$GITHUB_OUTPUT"
+
+      - name: Cloud Run health check
+        run: |
+          URL="${{ steps.cloudrun.outputs.url }}/api/health"
+          for i in $(seq 1 12); do
+            status=$(curl -s -o /dev/null -w "%{http_code}" "$URL" || echo "000")
+            if [ "$status" = "200" ]; then
+              echo "Cloud Run health OK"
+              exit 0
+            fi
+            echo "Intento $i: status $status"
+            sleep 5
+          done
+          exit 1
+
+      - name: Configure firebase.json
         env:
           FIREBASE_HOSTING_SITE: ${{ secrets.FIREBASE_HOSTING_SITE }}
+          GCP_REGION: ${{ secrets.GCP_REGION }}
         run: |
-          if [ -z "$FIREBASE_HOSTING_SITE" ]; then
-            echo "Falta el secret FIREBASE_HOSTING_SITE (terraform output -raw firebase_hosting_site)"
-            exit 1
-          fi
-          jq --arg site "$FIREBASE_HOSTING_SITE" '.hosting.site = $site' firebase.json > firebase.tmp.json
+          test -n "$FIREBASE_HOSTING_SITE"
+          test -n "$GCP_REGION"
+          jq \
+            --arg site "$FIREBASE_HOSTING_SITE" \
+            --arg region "$GCP_REGION" \
+            '.hosting.site = $site | .hosting.rewrites[0].run.region = $region' \
+            firebase.json > firebase.tmp.json
           mv firebase.tmp.json firebase.json
-          echo "firebase.json → hosting.site=$(jq -r '.hosting.site' firebase.json)"
+          cat firebase.json
 
-      - name: Deploy to Firebase Hosting
-        id: deploy
+      - name: Deploy Firebase Hosting
+        id: hosting
         run: |
           npx firebase-tools deploy \
             --only hosting \
-            --project ${{ secrets.FIREBASE_PROJECT_ID }} \
+            --project "${{ secrets.FIREBASE_PROJECT_ID }}" \
             --non-interactive
-        timeout-minutes: 5
 
-      - name: Health check post-deploy
-        id: health_check
+      - name: Firebase Hosting health check
         env:
           FIREBASE_HOSTING_SITE: ${{ secrets.FIREBASE_HOSTING_SITE }}
         run: |
           URL="https://${FIREBASE_HOSTING_SITE}.web.app/api/health"
-          for i in $(seq 1 6); do
-            status=$(curl -s -o /dev/null -w "%{http_code}" "$URL" || echo "000")
-            if [ "$status" = "200" ] || [ "$status" = "404" ]; then
-              echo "Deploy verificado OK (status: $status)"
+          for i in $(seq 1 12); do
+            body=$(curl -sf "$URL" 2>/dev/null || true)
+            if echo "$body" | grep -q '"component":"frontend"'; then
+              echo "Hosting + SSR OK: $body"
               exit 0
             fi
-            echo "Intento $i: status $status, esperando 10s..."
-            sleep 10
+            echo "Intento $i: esperando SSR vía Hosting..."
+            sleep 5
           done
-          echo "Deploy no verificado en 60s"
+          echo "Health vía Hosting falló"
           exit 1
 
-      - name: Rollback on failure
-        if: failure() && steps.deploy.outcome == 'failure'
-        env:
-          FIREBASE_HOSTING_SITE: ${{ secrets.FIREBASE_HOSTING_SITE }}
+      - name: Rollback Cloud Run on failure
+        if: failure()
         run: |
-          echo "Rollback: restaurando versión anterior..."
-          jq --arg site "$FIREBASE_HOSTING_SITE" '.hosting.site = $site' firebase.json > firebase.tmp.json
-          mv firebase.tmp.json firebase.json
-          npx firebase-tools hosting:rollback \
-            --site "$FIREBASE_HOSTING_SITE" \
-            --project ${{ secrets.FIREBASE_PROJECT_ID }} \
-            --non-interactive
-        timeout-minutes: 5
+          PREV="${{ needs.build-and-push.outputs.previous_image }}"
+          if [ -n "$PREV" ]; then
+            gcloud run services update dp-proj-00-03-front \
+              --region="${{ secrets.GCP_REGION }}" \
+              --image="$PREV" \
+              --quiet
+          fi
