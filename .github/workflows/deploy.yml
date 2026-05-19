@@ -163,10 +163,12 @@ jobs:
             --region="${{ secrets.GCP_REGION }}" \
             --image="${{ steps.image.outputs.uri }}" \
             --port=8080 \
-            --memory=512Mi \
+            --memory=1Gi \
             --cpu=1 \
             --cpu-boost \
             --timeout=60 \
+            --startup-probe=tcpSocket.port=8080,initialDelaySeconds=5,timeoutSeconds=5,periodSeconds=10,failureThreshold=36 \
+            --liveness-probe=httpGet.path=/api/health,httpGet.port=8080,initialDelaySeconds=10,timeoutSeconds=5,periodSeconds=30,failureThreshold=3 \
             --service-account=dp-proj-00-03-front@${{ secrets.GCP_PROJECT_ID }}.iam.gserviceaccount.com \
             --update-labels=managed-by=github-actions,commit-sha=${{ github.sha }} \
             --quiet

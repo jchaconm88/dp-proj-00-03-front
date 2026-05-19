@@ -20,6 +20,7 @@ COPY . .
 RUN pnpm build
 
 FROM node:22-alpine AS runner
+RUN apk add --no-cache libc6-compat
 WORKDIR /app
 ENV NODE_ENV=production
 ENV HOST=0.0.0.0
