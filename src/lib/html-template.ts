@@ -1,12 +1,26 @@
+import Mustache from 'mustache'
 import type { MetaTags } from '../types/index.ts'
+import type { Menu } from '../types/api.ts'
+import type { TemplateBlockData, TemplateManifest } from '../types/template.ts'
+import { richTextToHtml } from './rich-text.js'
 import { cache, CACHE_TTL } from './cache.js'
+import { resolveMediaInTemplateData } from './template-media.ts'
+import { mergeMenuIntegrations } from './template-menus.ts'
+import { enrichTemplateDataWithProductCatalogs } from './template-products.ts'
 
 const CMS_URL = import.meta.env.CMS_URL ?? 'http://localhost:3000'
 const CMS_TIMEOUT_MS = 5000
 
+const GLOBAL_PLACEHOLDER_RE = /\{\{(\w+)\}\}/g
+const BLOCK_SLOT_RE = /\{\{block:([a-zA-Z0-9_-]+)\}\}/g
+
 export interface TemplateBundle {
   html: string
   baseUrl: string
+  templateId?: string
+  tenantId?: string
+  manifest?: TemplateManifest
+  partials?: Record<string, string>
 }
 
 export interface TemplateVariables {
@@ -17,10 +31,66 @@ export interface TemplateVariables {
   homeUrl: string
 }
 
-const PLACEHOLDER_RE = /\{\{(\w+)\}\}/g
+export interface ProcessTemplateOptions {
+  vars: TemplateVariables
+  baseUrl: string
+  tenantId?: string
+  manifest?: TemplateManifest
+  partials?: Record<string, string>
+  templateData?: TemplateBlockData | null
+  menusByLocation?: Record<string, Menu | null>
+}
+
+function prepareValueForMustache(value: unknown): unknown {
+  if (value === null || value === undefined) return value
+  if (typeof value === 'object' && value !== null && 'root' in value) {
+    return richTextToHtml(value)
+  }
+  if (Array.isArray(value)) {
+    return value.map((item) => prepareValueForMustache(item))
+  }
+  if (typeof value === 'object') {
+    const obj = value as Record<string, unknown>
+    const out: Record<string, unknown> = {}
+    for (const [k, v] of Object.entries(obj)) {
+      out[k] = prepareValueForMustache(v)
+    }
+    return out
+  }
+  return value
+}
+
+export function renderBlockPartial(
+  partialHtml: string,
+  blockData: Record<string, unknown>,
+  globals: TemplateVariables,
+): string {
+  const view = {
+    ...prepareValueForMustache(blockData),
+    ...globals,
+  }
+  return Mustache.render(partialHtml, view)
+}
+
+export function substituteBlockSlots(
+  html: string,
+  manifest: TemplateManifest,
+  partials: Record<string, string>,
+  templateData: TemplateBlockData,
+  globals: TemplateVariables,
+): string {
+  return html.replace(BLOCK_SLOT_RE, (_match, blockId: string) => {
+    const blockDef = manifest.blocks[blockId]
+    if (!blockDef) return ''
+    const partialHtml = partials[blockDef.partial]
+    if (!partialHtml) return ''
+    const data = templateData[blockId] ?? {}
+    return renderBlockPartial(partialHtml, data, globals)
+  })
+}
 
 export function substitutePlaceholders(html: string, vars: TemplateVariables): string {
-  return html.replace(PLACEHOLDER_RE, (_match, key: string) => {
+  return html.replace(GLOBAL_PLACEHOLDER_RE, (_match, key: string) => {
     const value = vars[key as keyof TemplateVariables]
     return value !== undefined ? String(value) : ''
   })
@@ -56,7 +126,31 @@ export function rewriteRelativeAssetUrls(html: string, baseUrl: string): string 
   return result
 }
 
-export function processTemplate(
+export async function processTemplate(
+  html: string,
+  options: ProcessTemplateOptions,
+): Promise<string> {
+  const { vars, baseUrl, tenantId, manifest, partials, templateData, menusByLocation } = options
+
+  let result = html
+
+  if (manifest && partials && templateData) {
+    let data = await resolveMediaInTemplateData(templateData)
+    if (tenantId) {
+      data = await enrichTemplateDataWithProductCatalogs(tenantId, manifest, data)
+    }
+    if (menusByLocation && manifest.integrations) {
+      data = mergeMenuIntegrations(data, manifest, menusByLocation) as TemplateBlockData
+    }
+    result = substituteBlockSlots(result, manifest, partials, data, vars)
+  }
+
+  result = substitutePlaceholders(result, vars)
+  return rewriteRelativeAssetUrls(result, baseUrl)
+}
+
+/** @deprecated Usar processTemplate con ProcessTemplateOptions */
+export function processTemplateSync(
   html: string,
   vars: TemplateVariables,
   baseUrl: string,

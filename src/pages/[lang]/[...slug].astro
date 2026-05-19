@@ -12,7 +12,7 @@ import ContactForm from '../../components/ContactForm.astro'
 
 import TemplateLayout from '../../layouts/TemplateLayout.astro'
 
-import { getPage, getPost } from '../../lib/cms-client.js'
+import { getPage, getPost, getMenu } from '../../lib/cms-client.js'
 
 import { generateMetaTags, generateHreflangTags, generateSchemaOrg } from '../../lib/seo.js'
 
@@ -31,6 +31,10 @@ import {
   injectSchemaOrg,
 
 } from '../../lib/html-template.js'
+
+import { collectMenuLocations } from '../../lib/template-menus.js'
+
+import type { Menu } from '../../types/api.js'
 
 import type { Page } from '../../types/api.js'
 
@@ -206,27 +210,32 @@ if (contentType === 'page' && pageTemplateId) {
 
   if (bundle) {
 
-    let html = processTemplate(
-
-      bundle.html,
-
-      {
-
-        title: translation.title,
-
-        content: contentHtml,
-
-        tenantName: tenant.name,
-
-        lang: currentLang,
-
-        homeUrl,
-
-      },
-
-      bundle.baseUrl,
-
+    const menusByLocation: Record<string, Menu | null> = {}
+    const menuLocations = collectMenuLocations(
+      bundle.manifest,
+      translation.templateData ?? {},
     )
+    await Promise.all(
+      menuLocations.map(async (loc) => {
+        menusByLocation[loc] = await getMenu(tenant.id, loc)
+      }),
+    )
+
+    let html = await processTemplate(bundle.html, {
+      vars: {
+        title: translation.title,
+        content: contentHtml,
+        tenantName: tenant.name,
+        lang: currentLang,
+        homeUrl,
+      },
+      baseUrl: bundle.baseUrl,
+      tenantId: tenant.id,
+      manifest: bundle.manifest,
+      partials: bundle.partials,
+      templateData: translation.templateData ?? {},
+      menusByLocation,
+    })
 
     html = injectSeo(html, meta, currentLang)
 

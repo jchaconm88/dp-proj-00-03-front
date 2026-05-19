@@ -50,6 +50,7 @@ export interface PageTranslation {
   metaTitle: string | null
   metaDescription: string | null
   canonicalUrl: string | null
+  templateData?: Record<string, Record<string, unknown>> | null
 }
 
 export interface Page {
@@ -100,6 +101,8 @@ export interface MenuItem {
   url: string
   sortOrder: number
   depth: number
+  icon?: string
+  active?: boolean
   children: MenuItem[]
 }
 

@@ -17,7 +17,7 @@ Versión de contrato: **v1** (header opcional `X-API-Version: 1`)
 | GET | `/api/posts` | Posts publicados |
 | GET | `/api/menus` | Menús por ubicación |
 | GET | `/api/tenant-languages` | Idiomas del tenant |
-| GET | `/api/public/templates/{tenantId}/{templateId}` | Bundle HTML + `baseUrl` de assets |
+| GET | `/api/public/templates/{tenantId}/{templateId}` | Bundle: `html`, `baseUrl`, `manifest`, `partials` |
 | POST | `/api/contact-submissions` | Formulario de contacto |
 
 ## Webhook entrante

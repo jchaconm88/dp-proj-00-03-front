@@ -137,7 +137,7 @@ export async function getMenu(tenantId: string, location: string): Promise<Menu 
 
   try {
     const result = await fetchCMS<{ docs: Menu[] }>(
-      `/menus?where[tenant][equals]=${tenantId}&where[location][equals]=${location}&depth=3`,
+      `/menus?where[tenant][equals]=${tenantId}&where[location][equals]=${location}&depth=1`,
     )
     const menu = result.docs[0] ?? null
     if (menu) cache.set(cacheKey, menu, CACHE_TTL.CONTENT)
@@ -194,6 +194,18 @@ export function invalidateTenantCache(tenantId: string): void {
   cache.invalidateByPrefix(`menu:${tenantId}`)
   cache.invalidateByPrefix(`all-pages:${tenantId}`)
   cache.invalidateByPrefix(`template:${tenantId}`)
+  cache.invalidateByPrefix(`products:${tenantId}`)
+}
+
+function normalizeTranslations(raw: unknown): Page['translations'] {
+  if (!Array.isArray(raw)) return []
+  return raw.map((row) => {
+    const t = row as Record<string, unknown>
+    return {
+      ...(t as unknown as Page['translations'][number]),
+      templateData: (t['templateData'] as Page['translations'][number]['templateData']) ?? null,
+    }
+  })
 }
 
 function normalizePage(doc: Record<string, unknown>): Page {
@@ -207,5 +219,6 @@ function normalizePage(doc: Record<string, unknown>): Page {
     ...(doc as unknown as Page),
     tenantId,
     templateId: (doc['templateId'] as string | null | undefined) ?? null,
+    translations: normalizeTranslations(doc['translations']),
   }
 }

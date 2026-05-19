@@ -43,6 +43,10 @@ export const POST: APIRoute = async ({ request }) => {
     cache.invalidateByPrefix(`template:${event.tenantId}`)
   }
 
+  if (event.collection === 'products' && event.tenantId) {
+    cache.invalidateByPrefix(`products:${event.tenantId}`)
+  }
+
   return new Response(JSON.stringify({ ok: true }), {
     status: 200,
     headers: { 'Content-Type': 'application/json' },
