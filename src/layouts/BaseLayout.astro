@@ -1,0 +1,77 @@
+---
+import type { MetaTags, HreflangEntry } from '../types/index.ts'
+
+interface Props {
+  meta: MetaTags
+  hreflang?: HreflangEntry[]
+  schemaOrg?: object | null
+  language: string
+  tenant: import('../types/api.ts').Tenant
+}
+
+const { meta, hreflang = [], schemaOrg = null, language, tenant } = Astro.props
+const turnstiteSiteKey = import.meta.env.TURNSTILE_SITE_KEY ?? ''
+---
+
+<!DOCTYPE html>
+<!-- Req 7.5: atributo lang en el HTML de cada página -->
+<html lang={language}>
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+
+    <!-- SEO meta tags — Req 5.1 -->
+    <title>{meta.title}</title>
+    <meta name="description" content={meta.description} />
+    <link rel="canonical" href={meta.canonicalUrl} />
+
+    <!-- Open Graph — Req 5.2, Property 13 -->
+    <meta property="og:title" content={meta.ogTitle} />
+    <meta property="og:description" content={meta.ogDescription} />
+    <meta property="og:url" content={meta.ogUrl} />
+    <meta property="og:type" content="website" />
+    {meta.ogImage && <meta property="og:image" content={meta.ogImage} />}
+
+    <!-- Twitter Card -->
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content={meta.ogTitle} />
+    <meta name="twitter:description" content={meta.ogDescription} />
+    {meta.ogImage && <meta name="twitter:image" content={meta.ogImage} />}
+
+    <!-- Hreflang — Req 7.3, Property 20 -->
+    {hreflang.map((entry) => (
+      <link rel="alternate" hreflang={entry.lang} href={entry.url} />
+    ))}
+
+    <!-- Schema.org JSON-LD — Req 5.5, Property 16 -->
+    {schemaOrg && (
+      <script type="application/ld+json" set:html={JSON.stringify(schemaOrg)} />
+    )}
+
+    <!-- Cloudflare Turnstile para formularios -->
+    {turnstiteSiteKey && (
+      <script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer />
+    )}
+
+    <!-- Preconnect para performance -->
+    <link rel="preconnect" href="https://storage.googleapis.com" />
+
+    <slot name="head" />
+  </head>
+  <body>
+    <slot />
+  </body>
+</html>
+
+<style is:global>
+  /* Reset mínimo para evitar CLS — Req 6.6 */
+  *, *::before, *::after {
+    box-sizing: border-box;
+  }
+
+  /* Dimensiones explícitas para imágenes (evitar CLS) */
+  img {
+    display: block;
+    max-width: 100%;
+  }
+</style>

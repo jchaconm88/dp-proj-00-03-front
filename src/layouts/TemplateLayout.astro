@@ -1,0 +1,10 @@
+---
+/** Layout mínimo para páginas renderizadas desde plantilla HTML del CMS */
+interface Props {
+  processedHtml: string
+}
+
+const { processedHtml } = Astro.props
+---
+
+<Fragment set:html={processedHtml} />

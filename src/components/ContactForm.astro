@@ -1,0 +1,218 @@
+---
+interface Props {
+  tenantId: string
+}
+const { tenantId } = Astro.props
+const siteKey = import.meta.env.TURNSTILE_SITE_KEY ?? ''
+---
+
+<section class="contact-form">
+  <h2>Contacto</h2>
+
+  <form id="contact-form" novalidate>
+    <input type="hidden" name="tenantId" value={tenantId} />
+
+    <div class="field">
+      <label for="name">Nombre <span class="required">*</span></label>
+      <input
+        type="text"
+        id="name"
+        name="name"
+        maxlength="100"
+        required
+        autocomplete="name"
+      />
+      <span class="error" id="name-error" aria-live="polite"></span>
+    </div>
+
+    <div class="field">
+      <label for="email">Email <span class="required">*</span></label>
+      <input
+        type="email"
+        id="email"
+        name="email"
+        maxlength="254"
+        required
+        autocomplete="email"
+      />
+      <span class="error" id="email-error" aria-live="polite"></span>
+    </div>
+
+    <div class="field">
+      <label for="message">Mensaje <span class="required">*</span></label>
+      <textarea
+        id="message"
+        name="message"
+        maxlength="2000"
+        required
+        rows="5"
+      ></textarea>
+      <span class="error" id="message-error" aria-live="polite"></span>
+    </div>
+
+    <!-- Cloudflare Turnstile CAPTCHA — Req 8.5 -->
+    {siteKey && (
+      <div class="cf-turnstile" data-sitekey={siteKey} data-theme="light"></div>
+    )}
+
+    <button type="submit" id="submit-btn">Enviar mensaje</button>
+
+    <!-- Confirmación visible — Req 8.6 -->
+    <div id="success-message" class="success" hidden aria-live="polite">
+      Tu mensaje ha sido recibido. Te contactaremos pronto.
+    </div>
+
+    <div id="form-error" class="error-banner" hidden aria-live="polite"></div>
+  </form>
+</section>
+
+<script>
+  const form = document.getElementById('contact-form') as HTMLFormElement
+  const submitBtn = document.getElementById('submit-btn') as HTMLButtonElement
+  const successMsg = document.getElementById('success-message') as HTMLElement
+  const formError = document.getElementById('form-error') as HTMLElement
+
+  function clearErrors(): void {
+    document.querySelectorAll('.error').forEach((el) => {
+      const element = el as HTMLElement
+      element.textContent = ''
+    })
+    formError.hidden = true
+  }
+
+  function showFieldError(field: string, message: string): void {
+    const errorEl = document.getElementById(`${field}-error`)
+    if (errorEl) errorEl.textContent = message
+  }
+
+  form.addEventListener('submit', async (e) => {
+    e.preventDefault()
+    clearErrors()
+
+    const formData = new FormData(form)
+    const body: Record<string, string> = {}
+    formData.forEach((value, key) => {
+      body[key] = value as string
+    })
+
+    submitBtn.disabled = true
+    submitBtn.textContent = 'Enviando...'
+
+    try {
+      const response = await fetch('/api/contact', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      })
+
+      const data = (await response.json()) as {
+        success?: boolean
+        message?: string
+        errors?: Array<{ field: string; message: string }>
+        error?: string
+      }
+
+      if (response.ok && data.success) {
+        form.reset()
+        successMsg.hidden = false
+        form.hidden = true
+      } else if (data.errors) {
+        data.errors.forEach((err) => showFieldError(err.field, err.message))
+      } else {
+        formError.textContent = data.error ?? 'Error al enviar el formulario. Inténtalo de nuevo.'
+        formError.hidden = false
+      }
+    } catch {
+      formError.textContent = 'Error de conexión. Por favor inténtalo de nuevo.'
+      formError.hidden = false
+    } finally {
+      submitBtn.disabled = false
+      submitBtn.textContent = 'Enviar mensaje'
+    }
+  })
+</script>
+
+<style>
+  .contact-form {
+    max-width: 600px;
+  }
+
+  .field {
+    margin-bottom: 1.5rem;
+  }
+
+  label {
+    display: block;
+    margin-bottom: 0.5rem;
+    font-weight: 600;
+  }
+
+  .required {
+    color: #e53e3e;
+  }
+
+  input, textarea {
+    width: 100%;
+    padding: 0.75rem;
+    border: 1px solid #cbd5e0;
+    border-radius: 4px;
+    font-size: 1rem;
+    transition: border-color 0.2s;
+  }
+
+  input:focus, textarea:focus {
+    outline: none;
+    border-color: #4299e1;
+    box-shadow: 0 0 0 3px rgba(66, 153, 225, 0.15);
+  }
+
+  .error {
+    display: block;
+    color: #e53e3e;
+    font-size: 0.875rem;
+    margin-top: 0.25rem;
+  }
+
+  .error-banner {
+    padding: 1rem;
+    background: #fff5f5;
+    border: 1px solid #feb2b2;
+    border-radius: 4px;
+    color: #c53030;
+    margin-top: 1rem;
+  }
+
+  .success {
+    padding: 1rem;
+    background: #f0fff4;
+    border: 1px solid #9ae6b4;
+    border-radius: 4px;
+    color: #276749;
+  }
+
+  button[type="submit"] {
+    padding: 0.75rem 2rem;
+    background: #4299e1;
+    color: white;
+    border: none;
+    border-radius: 4px;
+    font-size: 1rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.2s;
+    margin-top: 1rem;
+  }
+
+  button[type="submit"]:hover:not(:disabled) {
+    background: #3182ce;
+  }
+
+  button[type="submit"]:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+  }
+
+  .cf-turnstile {
+    margin: 1rem 0;
+  }
+</style>

@@ -1,0 +1,333 @@
+---
+
+// Ruta dinámica SSR: sirve cualquier página o post de cualquier tenant
+
+export const prerender = false
+
+
+
+import BaseLayout from '../../layouts/BaseLayout.astro'
+
+import ContactForm from '../../components/ContactForm.astro'
+
+import TemplateLayout from '../../layouts/TemplateLayout.astro'
+
+import { getPage, getPost } from '../../lib/cms-client.js'
+
+import { generateMetaTags, generateHreflangTags, generateSchemaOrg } from '../../lib/seo.js'
+
+import { resolveLanguage } from '../../lib/i18n.js'
+
+import { richTextToHtml } from '../../lib/rich-text.js'
+
+import {
+
+  fetchTemplate,
+
+  processTemplate,
+
+  injectSeo,
+
+  injectSchemaOrg,
+
+} from '../../lib/html-template.js'
+
+import type { Page } from '../../types/api.js'
+
+
+
+const { tenant, hostname, primaryLanguage, availableLanguages } = Astro.locals
+
+
+
+if (!tenant) {
+
+  return new Response('Not Found', { status: 404 })
+
+}
+
+
+
+const { lang, slug: slugParam } = Astro.params
+
+const slug = Array.isArray(slugParam) ? slugParam.join('/') : (slugParam ?? '')
+
+
+
+const isBlog = slug.startsWith('blog/')
+
+const contentSlug = isBlog ? slug.replace('blog/', '') : slug
+
+
+
+let content = null
+
+let contentType: 'page' | 'post' = 'page'
+
+
+
+if (isBlog) {
+
+  content = await getPost(tenant.id, contentSlug)
+
+  contentType = 'post'
+
+} else {
+
+  content = await getPage(tenant.id, contentSlug, lang ?? primaryLanguage)
+
+  contentType = 'page'
+
+}
+
+
+
+if (!content) {
+
+  return new Response('Not Found', { status: 404 })
+
+}
+
+
+
+const availableTranslations = content.translations.map((t) => t.languageCode)
+
+const langResolution = resolveLanguage({
+
+  pathname: Astro.url.pathname,
+
+  availableLanguages,
+
+  primaryLanguage,
+
+  availableTranslations,
+
+  hostname,
+
+  origin: Astro.url.origin,
+
+  routeLanguage: lang,
+
+})
+
+
+
+if (langResolution.redirect) {
+
+  return Astro.redirect(langResolution.redirect.url, langResolution.redirect.status)
+
+}
+
+
+
+const currentLang = langResolution.language
+
+const translation =
+
+  content.translations.find((t) => t.languageCode === currentLang) ?? content.translations[0]
+
+
+
+if (!translation) {
+
+  return Astro.redirect(`${Astro.url.origin}/${primaryLanguage}`, 302)
+
+}
+
+
+
+const meta = generateMetaTags({
+
+  page: content,
+
+  translation,
+
+  tenant,
+
+  hostname,
+
+  language: currentLang,
+
+  slug: contentSlug,
+
+})
+
+
+
+const hreflang = generateHreflangTags({
+
+  hostname,
+
+  slug: isBlog ? `blog/${contentSlug}` : contentSlug,
+
+  availableLanguages: availableTranslations,
+
+  primaryLanguage,
+
+  currentLanguage: currentLang,
+
+})
+
+
+
+const schemaOrg = generateSchemaOrg({
+
+  page: content,
+
+  translation,
+
+  tenant,
+
+  hostname,
+
+  canonicalUrl: meta.canonicalUrl,
+
+  type: contentType,
+
+})
+
+
+
+const homeUrl = `${Astro.url.origin}/${currentLang}/inicio`
+
+const contentHtml = richTextToHtml(translation.content)
+
+const pageTemplateId = contentType === 'page' ? (content as Page).templateId : null
+
+
+
+let processedTemplateHtml: string | null = null
+
+
+
+if (contentType === 'page' && pageTemplateId) {
+
+  const bundle = await fetchTemplate(tenant.id, pageTemplateId)
+
+  if (bundle) {
+
+    let html = processTemplate(
+
+      bundle.html,
+
+      {
+
+        title: translation.title,
+
+        content: contentHtml,
+
+        tenantName: tenant.name,
+
+        lang: currentLang,
+
+        homeUrl,
+
+      },
+
+      bundle.baseUrl,
+
+    )
+
+    html = injectSeo(html, meta, currentLang)
+
+    if (content.hasSchemaOrg && schemaOrg) {
+
+      html = injectSchemaOrg(html, schemaOrg)
+
+    }
+
+    processedTemplateHtml = html
+
+  }
+
+}
+
+---
+
+
+
+{processedTemplateHtml ? (
+
+  <TemplateLayout processedHtml={processedTemplateHtml} />
+
+) : (
+
+  <BaseLayout
+
+    meta={meta}
+
+    hreflang={hreflang}
+
+    schemaOrg={schemaOrg}
+
+    language={currentLang}
+
+    tenant={tenant}
+
+  >
+
+    <main class="page-default">
+
+      <article>
+
+        <h1>{translation.title}</h1>
+
+        <div class="content" set:html={contentHtml} />
+
+      </article>
+
+
+
+      {contentType === 'page' && tenant.settings.captchaEnabled && (
+
+        <section class="contact-section">
+
+          <ContactForm tenantId={tenant.id} />
+
+        </section>
+
+      )}
+
+    </main>
+
+  </BaseLayout>
+
+)}
+
+
+
+<style>
+
+  .page-default {
+
+    max-width: 1200px;
+
+    margin: 0 auto;
+
+    padding: 2rem 1rem;
+
+  }
+
+
+
+  .page-default .content {
+
+    line-height: 1.7;
+
+  }
+
+
+
+  .page-default .contact-section {
+
+    margin-top: 4rem;
+
+    padding-top: 2rem;
+
+    border-top: 1px solid #eee;
+
+  }
+
+</style>
+
+
