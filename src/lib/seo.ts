@@ -5,6 +5,10 @@ import { richTextToPlainText } from './rich-text.js'
 const MAX_META_TITLE_LENGTH = 70
 const MAX_META_DESCRIPTION_LENGTH = 160
 
+function ensureNonEmpty(value: string, fallback: string): string {
+  return value.trim().length > 0 ? value : fallback
+}
+
 /**
  * Genera las meta tags SEO para una pagina.
  * Requisito 5.1, 5.7 — Properties 12, 13
@@ -23,12 +27,17 @@ export function generateMetaTags(params: {
   const { page, translation, tenant, hostname, language, slug } = params
 
   // Title fallback — Req 5.7
-  const title = translation.metaTitle?.slice(0, MAX_META_TITLE_LENGTH) ??
+  const titleRaw = translation.metaTitle?.slice(0, MAX_META_TITLE_LENGTH) ??
     `${translation.title} — ${tenant.name}`.slice(0, MAX_META_TITLE_LENGTH)
+  const title = ensureNonEmpty(titleRaw, tenant.name).slice(0, MAX_META_TITLE_LENGTH)
 
-  // Description fallback — Req 5.7
-  const description = translation.metaDescription?.slice(0, MAX_META_DESCRIPTION_LENGTH) ??
+  // Description fallback — Req 5.7 (contenido solo espacios → título o nombre del tenant)
+  const descriptionRaw = translation.metaDescription?.slice(0, MAX_META_DESCRIPTION_LENGTH) ??
     richTextToPlainText(translation.content).slice(0, MAX_META_DESCRIPTION_LENGTH)
+  const description = ensureNonEmpty(
+    descriptionRaw,
+    ensureNonEmpty(translation.title, tenant.name),
+  ).slice(0, MAX_META_DESCRIPTION_LENGTH)
 
   const canonicalUrl = translation.canonicalUrl ??
     page.seoConfig.canonicalUrl ??
