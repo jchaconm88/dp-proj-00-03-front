@@ -161,6 +161,11 @@ describe('Feature: multi-tenant-web-platform, Property 13: Completitud de Open G
   })
 })
 
+/** Comprueba presencia de slug solo en entradas <loc>, no como subcadena del XML. */
+function sitemapHasPageUrl(sitemap: string, hostname: string, lang: string, slug: string): boolean {
+  return sitemap.includes(`<loc>https://${hostname}/${lang}/${slug}</loc>`)
+}
+
 describe('Feature: multi-tenant-web-platform, Property 14: Consistencia de Sitemap', () => {
   it('sitemap contiene solo URLs de contenido published', () => {
     fc.assert(
@@ -173,6 +178,8 @@ describe('Feature: multi-tenant-web-platform, Property 14: Consistencia de Sitem
           { minLength: 1, maxLength: 10 },
         ),
         (pageData) => {
+          const hostname = 'example.com'
+          const lang = 'es'
           const pages: Page[] = pageData.map((d, idx) => buildPage({
             id: `page-${idx}`,
             slug: d.slug,
@@ -180,26 +187,22 @@ describe('Feature: multi-tenant-web-platform, Property 14: Consistencia de Sitem
           }))
 
           const sitemap = generateSitemap({
-            hostname: 'example.com',
+            hostname,
             pages,
             posts: [],
-            availableLanguages: ['es'],
+            availableLanguages: [lang],
           })
 
-          const publishedSlugs = pageData
-            .filter((d) => d.status === 'published')
-            .map((d) => d.slug)
+          // El sitemap indexa por slug: un slug aparece si existe al menos una página published.
+          const uniqueSlugs = [...new Set(pageData.map((d) => d.slug))]
 
-          const draftSlugs = pageData
-            .filter((d) => d.status !== 'published')
-            .map((d) => d.slug)
-
-          // Verificar que publicados están incluidos
-          const allPublishedIncluded = publishedSlugs.every((slug) => sitemap.includes(slug))
-          // Verificar que borradores/programados están excluidos
-          const noDraftIncluded = !draftSlugs.some((slug) => sitemap.includes(slug))
-
-          return allPublishedIncluded && noDraftIncluded
+          return uniqueSlugs.every((slug) => {
+            const shouldInclude = pageData.some(
+              (d) => d.slug === slug && d.status === 'published',
+            )
+            const isIncluded = sitemapHasPageUrl(sitemap, hostname, lang, slug)
+            return shouldInclude === isIncluded
+          })
         },
       ),
       { numRuns: 100 },
