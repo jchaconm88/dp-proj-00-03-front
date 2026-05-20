@@ -43,6 +43,10 @@ export default defineConfig({
 
   // Vite config para optimizacion
   vite: {
+    ssr: {
+      // Empaquetar dependencias usadas en SSR para no depender de node_modules en Docker
+      noExternal: ['mustache'],
+    },
     server: {
       // Dominios de tenant en hosts (ej. mi-cliente.local); Vite 6+ bloquea hosts no listados
       allowedHosts: true,

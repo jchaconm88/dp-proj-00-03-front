@@ -1,19 +1,19 @@
 import { defineMiddleware, sequence } from 'astro:middleware'
 import { resolveTenantByHostname } from '../lib/cms-client.js'
 import { getTenantLanguages } from '../lib/cms-client.js'
+import { getRequestHostname } from '../lib/request-hostname.js'
 
 /**
  * Middleware de resolución de tenant por hostname.
  * Requisito 2.2, 1.3, 15.3, 15.6 — Property 7
  *
- * - Extrae el hostname de la petición
+ * - Extrae el hostname (x-forwarded-host en Firebase Hosting, Host en local)
  * - Consulta la API del CMS para resolver el tenant activo
  * - Retorna 404 para dominios no registrados (sin exponer info de otros tenants)
  * - Retorna 503 para tenants desactivados
  */
 const tenantResolver = defineMiddleware(async (context, next) => {
-  const hostname =
-    context.request.headers.get('host')?.toLowerCase().trim().split(':')[0] ?? ''
+  const hostname = getRequestHostname(context.request)
 
   // Rutas internas no requieren resolución de tenant
   const isInternalRoute =
