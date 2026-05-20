@@ -33,20 +33,26 @@ const tenantResolver = defineMiddleware(async (context, next) => {
     return context.redirect(fixedPath, 301)
   }
 
-  // Resolver tenant
+  // Resolver tenant (timeout 5s en cms-client; dominio desconocido → 404)
   const tenant = hostname ? await resolveTenantByHostname(hostname) : null
 
   if (!tenant) {
-    // Dominio no registrado — Req 15.6: HTTP 404 sin exponer info de otros tenants
-    return new Response('Not Found', { status: 404 })
+    return new Response('Not Found', {
+      status: 404,
+      headers: { 'Content-Type': 'text/plain; charset=utf-8' },
+    })
   }
 
   if (!tenant.isActive) {
-    // Tenant desactivado — Req 1.3: dejar de servir contenido en <= 5 minutos
     return new Response('Site Temporarily Unavailable', {
       status: 503,
       headers: { 'Retry-After': '300' },
     })
+  }
+
+  if (context.url.pathname === '/' || context.url.pathname === '') {
+    const lang = tenant.defaultLanguage?.trim().toLowerCase() || 'es'
+    return context.redirect(`/${lang}/`, 302)
   }
 
   // Obtener idiomas configurados del tenant

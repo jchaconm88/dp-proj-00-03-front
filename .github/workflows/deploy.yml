@@ -163,6 +163,7 @@ jobs:
             --region="${{ secrets.GCP_REGION }}" \
             --image="${{ steps.image.outputs.uri }}" \
             --port=8080 \
+            --min-instances=1 \
             --memory=1Gi \
             --cpu=1 \
             --cpu-boost \
@@ -179,16 +180,28 @@ jobs:
 
       - name: Cloud Run health check
         run: |
-          URL="${{ steps.cloudrun.outputs.url }}/api/health"
+          BASE="${{ steps.cloudrun.outputs.url }}"
           for i in $(seq 1 12); do
-            status=$(curl -s -o /dev/null -w "%{http_code}" "$URL" || echo "000")
-            if [ "$status" = "200" ]; then
+            health=$(curl -s -o /dev/null -w "%{http_code}" "$BASE/api/health" || echo "000")
+            if [ "$health" = "200" ]; then
               echo "Cloud Run health OK"
+              break
+            fi
+            echo "Intento $i health: $health"
+            sleep 5
+            if [ "$i" = "12" ]; then exit 1; fi
+          done
+          # SSR debe responder (404 sin Host de tenant es válido; 000/5xx indica crash de runtime)
+          for i in $(seq 1 6); do
+            status=$(curl -s -o /dev/null -w "%{http_code}" --max-time 15 "$BASE/es/inicio" || echo "000")
+            if [ "$status" != "000" ]; then
+              echo "Cloud Run SSR probe /es/inicio → HTTP $status"
               exit 0
             fi
-            echo "Intento $i: status $status"
+            echo "Intento $i SSR probe: sin respuesta (timeout)"
             sleep 5
           done
+          echo "SSR no respondió a tiempo (revisar logs: ERR_MODULE_NOT_FOUND, CMS_URL, etc.)"
           exit 1
 
       - name: Configure firebase.json

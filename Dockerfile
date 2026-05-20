@@ -21,6 +21,7 @@ RUN pnpm build
 
 FROM node:22-alpine AS runner
 RUN apk add --no-cache libc6-compat
+RUN corepack enable && corepack prepare pnpm@11.1.2 --activate
 WORKDIR /app
 ENV NODE_ENV=production
 ENV HOST=0.0.0.0
@@ -28,6 +29,10 @@ ENV PORT=8080
 
 RUN addgroup --system --gid 1001 nodejs \
   && adduser --system --uid 1001 astro
+
+# SSR (@astrojs/node) resuelve imports externos (p. ej. mustache) desde node_modules en runtime
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
+RUN pnpm install --prod --frozen-lockfile
 
 COPY --from=builder --chown=astro:nodejs /app/dist ./dist
 
