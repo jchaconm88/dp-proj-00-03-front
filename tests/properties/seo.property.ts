@@ -161,8 +161,13 @@ describe('Feature: multi-tenant-web-platform, Property 13: Completitud de Open G
   })
 })
 
+const HOME_SLUG = 'home'
+
 /** Comprueba presencia de slug solo en entradas <loc>, no como subcadena del XML. */
 function sitemapHasPageUrl(sitemap: string, hostname: string, lang: string, slug: string): boolean {
+  if (slug === HOME_SLUG) {
+    return sitemap.includes(`<loc>https://${hostname}/${lang}/</loc>`)
+  }
   return sitemap.includes(`<loc>https://${hostname}/${lang}/${slug}</loc>`)
 }
 
@@ -191,6 +196,7 @@ describe('Feature: multi-tenant-web-platform, Property 14: Consistencia de Sitem
             pages,
             posts: [],
             availableLanguages: [lang],
+            homePageSlug: HOME_SLUG,
           })
 
           // El sitemap indexa por slug: un slug aparece si existe al menos una página published.

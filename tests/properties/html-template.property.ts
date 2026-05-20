@@ -14,7 +14,7 @@ const emptyVars = {
   content: '',
   tenantName: '',
   lang: 'es',
-  homeUrl: '/es/inicio',
+  homeUrl: '/es/',
 }
 
 function countMatches(source: string, pattern: RegExp): number {

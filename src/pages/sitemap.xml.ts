@@ -4,6 +4,7 @@ export const prerender = false
 import type { APIRoute } from 'astro'
 import { getAllPublishedPages, getPosts } from '../lib/cms-client.js'
 import { generateSitemap } from '../lib/seo.js'
+import { getHomePageSlug } from '../lib/home-page.js'
 import { cache, CACHE_TTL } from '../lib/cache.js'
 
 export const GET: APIRoute = async ({ locals }) => {
@@ -25,7 +26,13 @@ export const GET: APIRoute = async ({ locals }) => {
     getPosts(tenant.id),
   ])
 
-  const sitemap = generateSitemap({ hostname, pages, posts, availableLanguages })
+  const sitemap = generateSitemap({
+    hostname,
+    pages,
+    posts,
+    availableLanguages,
+    homePageSlug: getHomePageSlug(tenant),
+  })
   cache.set(cacheKey, sitemap, CACHE_TTL.SITEMAP)
 
   return new Response(sitemap, {

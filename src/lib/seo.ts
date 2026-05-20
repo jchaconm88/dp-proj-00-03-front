@@ -1,6 +1,17 @@
 import type { Tenant, Page, Post, SEOConfig, TenantLanguage } from '../types/api.js'
 import type { MetaTags, HreflangEntry, SitemapEntry } from '../types/index.js'
+import { getHomePageSlug, publicPathForPage } from './home-page.js'
 import { richTextToPlainText } from './rich-text.js'
+
+/** URL absoluta pública; `publicSlug` vacío = home en `/{lang}/`. */
+export function absolutePublicUrl(
+  hostname: string,
+  language: string,
+  cmsSlug: string,
+  homePageSlug: string,
+): string {
+  return `https://${hostname}${publicPathForPage(language, cmsSlug, homePageSlug)}`
+}
 
 const MAX_META_TITLE_LENGTH = 70
 const MAX_META_DESCRIPTION_LENGTH = 160
@@ -23,8 +34,10 @@ export function generateMetaTags(params: {
   hostname: string
   language: string
   slug: string
+  homePageSlug?: string
 }): MetaTags {
-  const { page, translation, tenant, hostname, language, slug } = params
+  const { page, translation, tenant, hostname, language, slug, homePageSlug } = params
+  const homeSlug = homePageSlug ?? getHomePageSlug(tenant)
 
   // Title fallback — Req 5.7
   const titleRaw = translation.metaTitle?.slice(0, MAX_META_TITLE_LENGTH) ??
@@ -39,9 +52,10 @@ export function generateMetaTags(params: {
     ensureNonEmpty(translation.title, tenant.name),
   ).slice(0, MAX_META_DESCRIPTION_LENGTH)
 
-  const canonicalUrl = translation.canonicalUrl ??
+  const canonicalUrl =
+    translation.canonicalUrl ??
     page.seoConfig.canonicalUrl ??
-    `https://${hostname}/${language}/${slug}`
+    absolutePublicUrl(hostname, language, slug, homeSlug)
 
   const ogImage = page.seoConfig.ogImage ?? null
 
@@ -69,18 +83,19 @@ export function generateHreflangTags(params: {
   availableLanguages: string[]
   primaryLanguage: string
   currentLanguage: string
+  homePageSlug: string
 }): HreflangEntry[] {
-  const { hostname, slug, availableLanguages, primaryLanguage } = params
+  const { hostname, slug, availableLanguages, primaryLanguage, homePageSlug } = params
 
   const entries: HreflangEntry[] = availableLanguages.map((lang) => ({
     lang,
-    url: `https://${hostname}/${lang}/${slug}`,
+    url: absolutePublicUrl(hostname, lang, slug, homePageSlug),
   }))
 
   // x-default apunta al idioma principal — Req 7.3
   entries.push({
     lang: 'x-default',
-    url: `https://${hostname}/${primaryLanguage}/${slug}`,
+    url: absolutePublicUrl(hostname, primaryLanguage, slug, homePageSlug),
   })
 
   return entries
@@ -145,8 +160,9 @@ export function generateSitemap(params: {
   pages: Page[]
   posts: Post[]
   availableLanguages: string[]
+  homePageSlug: string
 }): string {
-  const { hostname, pages, posts, availableLanguages } = params
+  const { hostname, pages, posts, availableLanguages, homePageSlug } = params
 
   const entries: SitemapEntry[] = []
 
@@ -154,7 +170,7 @@ export function generateSitemap(params: {
   for (const page of pages.filter((p) => p.status === 'published')) {
     for (const lang of availableLanguages) {
       entries.push({
-        url: `https://${hostname}/${lang}/${page.slug}`,
+        url: absolutePublicUrl(hostname, lang, page.slug, homePageSlug),
         lastmod: page.updatedAt.split('T')[0] ?? new Date().toISOString().split('T')[0] ?? '',
         changefreq: 'weekly',
         priority: page.pageType === 'landing' ? 1.0 : 0.8,

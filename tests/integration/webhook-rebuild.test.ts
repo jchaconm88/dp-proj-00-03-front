@@ -11,7 +11,7 @@ describe('POST /api/webhooks/rebuild', () => {
 
   it('invalida caché del tenant con firma válida', async () => {
     const tenantId = 'tenant-webhook-test'
-    cache.set(`page:${tenantId}:inicio:es`, { id: '1' }, 300)
+    cache.set(`page:${tenantId}:home:es`, { id: '1' }, 300)
     cache.set(`template:${tenantId}:demo`, { html: '<html></html>', baseUrl: 'http://x' }, 300)
 
     const event = {
@@ -36,7 +36,7 @@ describe('POST /api/webhooks/rebuild', () => {
     const response = await POST({ request } as Parameters<typeof POST>[0])
     expect(response.status).toBe(200)
 
-    expect(cache.get(`page:${tenantId}:inicio:es`)).toBeNull()
+    expect(cache.get(`page:${tenantId}:home:es`)).toBeNull()
     expect(cache.get(`template:${tenantId}:demo`)).toBeNull()
   })
 

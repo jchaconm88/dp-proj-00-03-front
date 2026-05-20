@@ -194,9 +194,9 @@ jobs:
           done
           # SSR debe responder (404 sin Host de tenant es válido; 000/5xx indica crash de runtime)
           for i in $(seq 1 6); do
-            status=$(curl -s -o /dev/null -w "%{http_code}" --max-time 15 "$BASE/es/inicio" || echo "000")
+            status=$(curl -s -o /dev/null -w "%{http_code}" --max-time 15 "$BASE/es/" || echo "000")
             if [ "$status" != "000" ]; then
-              echo "Cloud Run SSR probe /es/inicio → HTTP $status"
+              echo "Cloud Run SSR probe /es/ → HTTP $status"
               exit 0
             fi
             echo "Intento $i SSR probe: sin respuesta (timeout)"

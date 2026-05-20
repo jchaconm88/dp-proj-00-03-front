@@ -18,6 +18,8 @@ export interface TenantSettings {
   maxStorageBytes: number
   currentStorageBytes: number
   captchaEnabled: boolean
+  /** Slug en Pages que se sirve en `/{idioma}/` (default: home) */
+  homePageSlug?: string
   frontendWebhookUrl?: string
 }
 

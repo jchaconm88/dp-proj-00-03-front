@@ -34,6 +34,8 @@ import {
 
 import { collectMenuLocations } from '../../lib/template-menus.js'
 
+import { getHomePageSlug } from '../../lib/home-page.js'
+
 import type { Menu } from '../../types/api.js'
 
 import type { Page } from '../../types/api.js'
@@ -58,30 +60,35 @@ const slug = Array.isArray(slugParam) ? slugParam.join('/') : (slugParam ?? '')
 
 
 
+const homePageSlug = getHomePageSlug(tenant)
+
 const isBlog = slug.startsWith('blog/')
 
 const contentSlug = isBlog ? slug.replace('blog/', '') : slug
 
+const routeLang = lang ?? primaryLanguage
 
+// /es/home → /es/ cuando home es la página de inicio del tenant
+if (!isBlog && contentSlug === homePageSlug) {
+  const langPrefix = `/${routeLang}`
+  const normalizedPath = Astro.url.pathname.replace(/\/$/, '') || '/'
+  if (normalizedPath !== langPrefix) {
+    return Astro.redirect(`${langPrefix}/`, 301)
+  }
+}
+
+const lookupSlug = !isBlog && contentSlug === '' ? homePageSlug : contentSlug
 
 let content = null
 
 let contentType: 'page' | 'post' = 'page'
 
-
-
 if (isBlog) {
-
-  content = await getPost(tenant.id, contentSlug)
-
+  content = await getPost(tenant.id, lookupSlug)
   contentType = 'post'
-
 } else {
-
-  content = await getPage(tenant.id, contentSlug, lang ?? primaryLanguage)
-
+  content = await getPage(tenant.id, lookupSlug, routeLang)
   contentType = 'page'
-
 }
 
 
@@ -140,36 +147,27 @@ if (!translation) {
 
 
 
+const seoSlug = isBlog ? `blog/${lookupSlug}` : lookupSlug
+
 const meta = generateMetaTags({
-
   page: content,
-
   translation,
-
   tenant,
-
   hostname,
-
   language: currentLang,
-
-  slug: contentSlug,
-
+  slug: seoSlug,
+  homePageSlug,
 })
 
 
 
 const hreflang = generateHreflangTags({
-
   hostname,
-
-  slug: isBlog ? `blog/${contentSlug}` : contentSlug,
-
+  slug: seoSlug,
   availableLanguages: availableTranslations,
-
   primaryLanguage,
-
   currentLanguage: currentLang,
-
+  homePageSlug,
 })
 
 
@@ -192,7 +190,7 @@ const schemaOrg = generateSchemaOrg({
 
 
 
-const homeUrl = `${Astro.url.origin}/${currentLang}/inicio`
+const homeUrl = `${Astro.url.origin}/${currentLang}/`
 
 const contentHtml = richTextToHtml(translation.content)
 
