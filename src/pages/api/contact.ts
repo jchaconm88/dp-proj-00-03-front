@@ -3,7 +3,9 @@ export const prerender = false
 
 import type { APIRoute } from 'astro'
 
-const CMS_URL = import.meta.env.CMS_URL ?? 'http://localhost:3000'
+import { getCmsUrl } from '../../lib/cms-url.js'
+
+const CMS_URL = getCmsUrl()
 const TURNSTILE_SECRET = import.meta.env.TURNSTILE_SECRET_KEY ?? ''
 
 interface TurnstileVerifyResponse {

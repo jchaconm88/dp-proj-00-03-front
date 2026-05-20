@@ -1,6 +1,7 @@
 import type { TemplateBlockData } from '../types/template.ts'
+import { getCmsUrl } from './cms-url.js'
 
-const CMS_URL = import.meta.env.CMS_URL ?? 'http://localhost:3000'
+const CMS_URL = getCmsUrl()
 
 const mediaUrlCache = new Map<string, string>()
 

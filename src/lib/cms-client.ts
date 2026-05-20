@@ -1,7 +1,8 @@
 import type { Tenant, Domain, Page, Post, Menu, TenantLanguage } from '../types/api.js'
 import { cache, CACHE_TTL } from './cache.js'
+import { getCmsUrl } from './cms-url.js'
 
-const CMS_URL = import.meta.env.CMS_URL ?? 'http://localhost:3000'
+const CMS_URL = getCmsUrl()
 const CMS_TIMEOUT_MS = 5000 // Req 15.4: timeout de 5 segundos
 
 async function fetchCMS<T>(path: string, options?: RequestInit): Promise<T> {

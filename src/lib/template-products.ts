@@ -1,8 +1,9 @@
 import type { TemplateBlockData, TemplateManifest } from '../types/template.ts'
 import { listCatalogBlocks } from './template-catalog-blocks.ts'
 import { cache, CACHE_TTL } from './cache.js'
+import { getCmsUrl } from './cms-url.js'
 
-const CMS_URL = import.meta.env.CMS_URL ?? 'http://localhost:3000'
+const CMS_URL = getCmsUrl()
 
 export interface CatalogProductItem {
   title: string

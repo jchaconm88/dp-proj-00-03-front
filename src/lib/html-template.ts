@@ -7,8 +7,9 @@ import { cache, CACHE_TTL } from './cache.js'
 import { resolveMediaInTemplateData } from './template-media.ts'
 import { mergeMenuIntegrations } from './template-menus.ts'
 import { enrichTemplateDataWithProductCatalogs } from './template-products.ts'
+import { getCmsUrl } from './cms-url.js'
 
-const CMS_URL = import.meta.env.CMS_URL ?? 'http://localhost:3000'
+const CMS_URL = getCmsUrl()
 const CMS_TIMEOUT_MS = 5000
 
 const GLOBAL_PLACEHOLDER_RE = /\{\{(\w+)\}\}/g

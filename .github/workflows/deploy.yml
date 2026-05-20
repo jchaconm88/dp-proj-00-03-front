@@ -168,6 +168,7 @@ jobs:
             --cpu=1 \
             --cpu-boost \
             --timeout=60 \
+            --set-env-vars="CMS_URL=${{ secrets.CMS_URL }}" \
             --startup-probe=tcpSocket.port=8080,initialDelaySeconds=5,timeoutSeconds=5,periodSeconds=10,failureThreshold=36 \
             --liveness-probe=httpGet.path=/api/health,httpGet.port=8080,initialDelaySeconds=10,timeoutSeconds=5,periodSeconds=30,failureThreshold=3 \
             --service-account=dp-proj-00-03-front@${{ secrets.GCP_PROJECT_ID }}.iam.gserviceaccount.com \
