@@ -163,7 +163,7 @@ jobs:
             --region="${{ secrets.GCP_REGION }}" \
             --image="${{ steps.image.outputs.uri }}" \
             --port=8080 \
-            --min-instances=1 \
+            --min-instances=0 \
             --memory=1Gi \
             --cpu=1 \
             --cpu-boost \
