@@ -68,7 +68,7 @@ const contentSlug = isBlog ? slug.replace('blog/', '') : slug
 
 const routeLang = lang ?? primaryLanguage
 
-// /es/home → /es/ cuando home es la página de inicio del tenant
+// /es/home → /es/ (solo el slug configurado como home; inicio y demás usan su propia URL)
 if (!isBlog && contentSlug === homePageSlug) {
   const langPrefix = `/${routeLang}`
   const normalizedPath = Astro.url.pathname.replace(/\/$/, '') || '/'
@@ -147,7 +147,8 @@ if (!translation) {
 
 
 
-const seoSlug = isBlog ? `blog/${lookupSlug}` : lookupSlug
+const pageCmsSlug = contentType === 'page' ? (content as Page).slug : contentSlug
+const seoSlug = isBlog ? `blog/${contentSlug}` : pageCmsSlug
 
 const meta = generateMetaTags({
   page: content,

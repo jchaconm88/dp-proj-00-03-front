@@ -38,6 +38,7 @@ describe('home-page', () => {
 
   it('publicPathForPage deja la home en /es/', () => {
     expect(publicPathForPage('es', 'home', 'home')).toBe('/es/')
+    expect(publicPathForPage('es', 'inicio', 'home')).toBe('/es/inicio')
     expect(publicPathForPage('es', 'contacto', 'home')).toBe('/es/contacto')
   })
 })
