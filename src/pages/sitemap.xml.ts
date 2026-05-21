@@ -14,10 +14,7 @@ export const GET: APIRoute = async ({ locals }) => {
   const cached = cache.get<string>(cacheKey)
   if (cached) {
     return new Response(cached.data, {
-      headers: {
-        'Content-Type': 'application/xml',
-        'Cache-Control': 'public, max-age=600, s-maxage=600', // 10 min
-      },
+      headers: { 'Content-Type': 'application/xml' },
     })
   }
 
@@ -36,9 +33,6 @@ export const GET: APIRoute = async ({ locals }) => {
   cache.set(cacheKey, sitemap, CACHE_TTL.SITEMAP)
 
   return new Response(sitemap, {
-    headers: {
-      'Content-Type': 'application/xml',
-      'Cache-Control': 'public, max-age=600, s-maxage=600',
-    },
+    headers: { 'Content-Type': 'application/xml' },
   })
 }

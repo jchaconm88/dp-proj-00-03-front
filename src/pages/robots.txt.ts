@@ -10,10 +10,6 @@ export const GET: APIRoute = ({ locals }) => {
   const content = generateRobotsTxt(hostname)
 
   return new Response(content, {
-    headers: {
-      'Content-Type': 'text/plain',
-      // Cache largo — el robots.txt cambia raramente
-      'Cache-Control': 'public, max-age=86400, s-maxage=86400',
-    },
+    headers: { 'Content-Type': 'text/plain' },
   })
 }

@@ -206,6 +206,8 @@ export function invalidateTenantCache(tenantId: string): void {
   cache.invalidateByPrefix(`all-pages:${tenantId}`)
   cache.invalidateByPrefix(`template:${tenantId}`)
   cache.invalidateByPrefix(`products:${tenantId}`)
+  cache.invalidateByPrefix(`languages:${tenantId}`)
+  cache.invalidateByPrefix('sitemap:')
 }
 
 function normalizeTranslations(raw: unknown): Page['translations'] {

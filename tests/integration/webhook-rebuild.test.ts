@@ -1,12 +1,14 @@
 import { describe, it, expect, beforeEach } from 'vitest'
 import crypto from 'node:crypto'
 import { POST } from '../../src/pages/api/webhooks/rebuild.js'
+import { getTenantCdnVersion, resetTenantCdnVersions } from '../../src/lib/cdn-cache.js'
 import { cache } from '../../src/lib/cache.js'
 
 describe('POST /api/webhooks/rebuild', () => {
   beforeEach(() => {
     cache.invalidateByPrefix('page:')
     cache.invalidateByPrefix('template:')
+    resetTenantCdnVersions()
   })
 
   it('invalida caché del tenant con firma válida', async () => {
@@ -38,6 +40,7 @@ describe('POST /api/webhooks/rebuild', () => {
 
     expect(cache.get(`page:${tenantId}:home:es`)).toBeNull()
     expect(cache.get(`template:${tenantId}:demo`)).toBeNull()
+    expect(getTenantCdnVersion(tenantId)).toBe(1)
   })
 
   it('invalida prefijo template al cambiar html-templates', async () => {

@@ -13,6 +13,10 @@ Frontend Astro SSG/SSR multi-tenant para la plataforma dp-proj-00-03.
 Un único sitio Astro SSR recibe todos los dominios personalizados de los tenants.
 El middleware resuelve el tenant activo a partir del `host` de la petición.
 
+### CDN (req. 14.4)
+
+El HTML se cachea en **Firebase Hosting CDN** con `s-maxage=120` y `Vary: Host, X-Forwarded-Host` (cada dominio tiene su propia copia). Al publicar en el CMS, el webhook invalida caché en memoria, incrementa la versión CDN (`ETag`) y precalienta contenido. Cloud Run puede mantener `min_instances=0`.
+
 ```
 dominio-a.com ─┐
 dominio-b.com ─┼──→ Firebase Hosting (1 sitio) ──→ Astro SSR ──→ resolveTenant(host)

@@ -5,6 +5,8 @@ export const prerender = false
 import type { APIRoute } from 'astro'
 import crypto from 'crypto'
 import type { ContentChangeWebhook } from '../../../types/api.js'
+import { prewarmTenantCache } from '../../../lib/cache-prewarm.js'
+import { bumpTenantCdnVersion } from '../../../lib/cdn-cache.js'
 import { invalidateTenantCache } from '../../../lib/cms-client.js'
 import { cache } from '../../../lib/cache.js'
 
@@ -32,11 +34,18 @@ export const POST: APIRoute = async ({ request }) => {
   // Invalidar cache del tenant afectado — Req 15.2: regenerar en <= 2 min
   if (event.tenantId && event.tenantId !== 'system') {
     invalidateTenantCache(event.tenantId)
+    bumpTenantCdnVersion(event.tenantId)
+    void prewarmTenantCache(event.tenantId).catch((err) => {
+      console.warn('Prewarm tras webhook falló:', err)
+    })
   }
 
   // Si cambió un dominio, invalidar cache de resolución de tenants
   if (event.collection === 'domains') {
     cache.invalidateByPrefix('tenant:hostname:')
+    if (event.tenantId && event.tenantId !== 'system') {
+      bumpTenantCdnVersion(event.tenantId)
+    }
   }
 
   if (event.collection === 'html-templates' && event.tenantId) {

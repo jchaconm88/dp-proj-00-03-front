@@ -1,6 +1,12 @@
 import { defineMiddleware, sequence } from 'astro:middleware'
 import { resolveTenantByHostname } from '../lib/cms-client.js'
 import { getTenantLanguages } from '../lib/cms-client.js'
+import {
+  CDN_XML_S_MAXAGE,
+  isCdnManagedPath,
+  withCdnHtmlCache,
+  withCdnPublicAssetCache,
+} from '../lib/cdn-cache.js'
 import { getRequestHostname } from '../lib/request-hostname.js'
 
 /**
@@ -90,7 +96,54 @@ const tenantResolver = defineMiddleware(async (context, next) => {
   return next()
 })
 
-export const onRequest = sequence(tenantResolver)
+/**
+ * Cabeceras Cache-Control / Vary / ETag para Firebase CDN (req. 14.4).
+ * HTML y sitemap/robots cacheables por host; APIs y errores sin store.
+ */
+const cdnCacheHeaders = defineMiddleware(async (context, next) => {
+  const response = await next()
+
+  if (!isCdnManagedPath(context.url.pathname)) {
+    return response
+  }
+
+  if (response.status !== 200) {
+    return withCdnHtmlCache(
+      new Response(response.body, {
+        status: response.status,
+        statusText: response.statusText,
+        headers: response.headers,
+      }),
+      { hostname: null, tenantId: undefined },
+    )
+  }
+
+  const hostname = getRequestHostname(context.request)
+  const tenantId = context.locals.tenant?.id
+  const contentType = response.headers.get('content-type') ?? ''
+
+  if (contentType.includes('text/html')) {
+    return withCdnHtmlCache(response, { hostname, tenantId })
+  }
+
+  if (contentType.includes('application/xml')) {
+    return withCdnPublicAssetCache(response, {
+      hostname,
+      maxAgeSeconds: CDN_XML_S_MAXAGE,
+    })
+  }
+
+  if (contentType.includes('text/plain') && context.url.pathname === '/robots.txt') {
+    return withCdnPublicAssetCache(response, {
+      hostname,
+      maxAgeSeconds: 86400,
+    })
+  }
+
+  return response
+})
+
+export const onRequest = sequence(tenantResolver, cdnCacheHeaders)
 
 // Extender tipos de Astro locals
 declare global {
