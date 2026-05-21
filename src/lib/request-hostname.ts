@@ -1,14 +1,22 @@
+function normalizeHostnameHeader(value: string | null): string {
+  if (!value) return ''
+  const first = value.split(',')[0]?.trim().toLowerCase() ?? ''
+  return first ? first.split(':')[0] : ''
+}
+
 /**
  * Hostname público de la petición.
- * Firebase Hosting → Cloud Run envía el dominio en x-forwarded-host, no en Host.
+ * Firebase Hosting → Cloud Run: usar x-forwarded-host o x-fh-requested-host (no el Host interno .run.app).
  */
 export function getRequestHostname(request: Request): string {
-  const forwarded = request.headers.get('x-forwarded-host')
-  if (forwarded) {
-    const first = forwarded.split(',')[0]?.trim().toLowerCase() ?? ''
-    if (first) return first.split(':')[0]
+  for (const name of ['x-forwarded-host', 'x-fh-requested-host']) {
+    const host = normalizeHostnameHeader(request.headers.get(name))
+    if (host) return host
   }
 
-  const host = request.headers.get('host')?.toLowerCase().trim() ?? ''
-  return host ? host.split(':')[0] : ''
+  const host = normalizeHostnameHeader(request.headers.get('host'))
+  // Evitar resolver tenant con el hostname interno de Cloud Run
+  if (host && !host.endsWith('.run.app')) return host
+
+  return ''
 }

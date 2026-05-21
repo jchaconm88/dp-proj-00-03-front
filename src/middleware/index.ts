@@ -33,15 +33,29 @@ const tenantResolver = defineMiddleware(async (context, next) => {
     return context.redirect(fixedPath, 301)
   }
 
-  // Resolver tenant (timeout 5s en cms-client; dominio desconocido → 404)
-  const tenant = hostname ? await resolveTenantByHostname(hostname) : null
-
-  if (!tenant) {
+  if (!hostname) {
     return new Response('Not Found', {
       status: 404,
       headers: { 'Content-Type': 'text/plain; charset=utf-8' },
     })
   }
+
+  const resolution = await resolveTenantByHostname(hostname)
+
+  if (!resolution.ok) {
+    if (resolution.reason === 'unavailable') {
+      return new Response('Service Temporarily Unavailable', {
+        status: 503,
+        headers: { 'Content-Type': 'text/plain; charset=utf-8', 'Retry-After': '30' },
+      })
+    }
+    return new Response('Not Found', {
+      status: 404,
+      headers: { 'Content-Type': 'text/plain; charset=utf-8' },
+    })
+  }
+
+  const tenant = resolution.tenant
 
   if (!tenant.isActive) {
     return new Response('Site Temporarily Unavailable', {

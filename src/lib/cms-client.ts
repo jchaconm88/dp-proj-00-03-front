@@ -29,16 +29,23 @@ async function fetchCMS<T>(path: string, options?: RequestInit): Promise<T> {
   }
 }
 
+export type TenantResolutionResult =
+  | { ok: true; tenant: Tenant }
+  | { ok: false; reason: 'not_found' }
+  | { ok: false; reason: 'unavailable' }
+
 /**
  * Resuelve el tenant a partir del hostname.
  * Req 15.3, 2.2 — Property 7
  */
-export async function resolveTenantByHostname(hostname: string): Promise<Tenant | null> {
+export async function resolveTenantByHostname(hostname: string): Promise<TenantResolutionResult> {
   const normalized = hostname.toLowerCase().trim().split(':')[0]
   const cacheKey = `tenant:hostname:${normalized}`
 
   const cached = cache.get<Tenant | null>(cacheKey)
-  if (cached !== null) return cached.data
+  if (cached !== null) {
+    return cached.data ? { ok: true, tenant: cached.data } : { ok: false, reason: 'not_found' }
+  }
 
   const controller = new AbortController()
   const timeoutId = setTimeout(() => controller.abort(), CMS_TIMEOUT_MS)
@@ -54,19 +61,22 @@ export async function resolveTenantByHostname(hostname: string): Promise<Tenant 
 
     if (response.status === 404) {
       cache.set(cacheKey, null, CACHE_TTL.TENANT_RESOLUTION)
-      return null
+      return { ok: false, reason: 'not_found' }
     }
 
     if (!response.ok) {
-      throw new Error(`CMS resolve-tenant error: ${response.status} ${response.statusText}`)
+      const stale = cache.getStale<Tenant | null>(cacheKey, CACHE_TTL.STALE_MAX)
+      if (stale?.data) return { ok: true, tenant: stale.data }
+      return { ok: false, reason: 'unavailable' }
     }
 
     const tenant = (await response.json()) as Tenant
     cache.set(cacheKey, tenant, CACHE_TTL.TENANT_RESOLUTION)
-    return tenant
+    return { ok: true, tenant }
   } catch {
     const stale = cache.getStale<Tenant | null>(cacheKey, CACHE_TTL.STALE_MAX)
-    return stale?.data ?? null
+    if (stale?.data) return { ok: true, tenant: stale.data }
+    return { ok: false, reason: 'unavailable' }
   } finally {
     clearTimeout(timeoutId)
   }
