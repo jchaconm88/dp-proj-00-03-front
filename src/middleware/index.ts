@@ -114,7 +114,7 @@ const cdnCacheHeaders = defineMiddleware(async (context, next) => {
         statusText: response.statusText,
         headers: response.headers,
       }),
-      { hostname: null, tenantId: undefined },
+      { hostname: null, tenantId: undefined, pathname: context.url.pathname },
     )
   }
 
@@ -122,21 +122,30 @@ const cdnCacheHeaders = defineMiddleware(async (context, next) => {
   const tenantId = context.locals.tenant?.id
   const contentType = response.headers.get('content-type') ?? ''
 
+  const ifNoneMatch = context.request.headers.get('if-none-match')
+  const pathname = context.url.pathname
+
   if (contentType.includes('text/html')) {
-    return withCdnHtmlCache(response, { hostname, tenantId })
+    return withCdnHtmlCache(response, { hostname, tenantId, pathname, ifNoneMatch })
   }
 
   if (contentType.includes('application/xml')) {
     return withCdnPublicAssetCache(response, {
       hostname,
+      tenantId,
+      assetKind: 'sitemap',
       maxAgeSeconds: CDN_XML_S_MAXAGE,
+      ifNoneMatch,
     })
   }
 
-  if (contentType.includes('text/plain') && context.url.pathname === '/robots.txt') {
+  if (contentType.includes('text/plain') && pathname === '/robots.txt') {
     return withCdnPublicAssetCache(response, {
       hostname,
+      tenantId,
+      assetKind: 'robots',
       maxAgeSeconds: 86400,
+      ifNoneMatch,
     })
   }
 

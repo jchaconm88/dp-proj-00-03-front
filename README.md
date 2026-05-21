@@ -15,7 +15,7 @@ El middleware resuelve el tenant activo a partir del `host` de la petición.
 
 ### CDN (req. 14.4)
 
-El HTML se cachea en **Firebase Hosting CDN** con `s-maxage=120` y `Vary: Host, X-Forwarded-Host` (cada dominio tiene su propia copia). Al publicar en el CMS, el webhook invalida caché en memoria, incrementa la versión CDN (`ETag`) y precalienta contenido. Cloud Run puede mantener `min_instances=0`.
+HTML en **Firebase Hosting CDN** con `Vary` por dominio. Por defecto (`CDN_HTML_CACHE_MODE=revalidate`) la CDN **no** expira cada 2 min: invalida cuando el CMS llama al webhook (o un `POST /api/webhooks/rebuild` manual) y sube la versión `ETag` del tenant. Caché en memoria del servidor: 24 h salvo invalidación explícita.
 
 ```
 dominio-a.com ─┐

@@ -69,7 +69,7 @@ export const cache = new MemoryCache()
 
 export const CACHE_TTL = {
   TENANT_RESOLUTION: 5 * 60, // 5 minutos (dominios cambian poco)
-  CONTENT: 2 * 60, // 2 minutos (para actualizarse tras webhook)
-  SITEMAP: 10 * 60, // 10 minutos
+  CONTENT: 24 * 60 * 60, // 24h; invalidación explícita vía webhook / rebuild
+  SITEMAP: 24 * 60 * 60,
   STALE_MAX: 24 * 60 * 60, // 24h máximo para contenido stale
 } as const
