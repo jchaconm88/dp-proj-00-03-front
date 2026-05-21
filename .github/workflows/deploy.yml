@@ -166,6 +166,7 @@ jobs:
             --min-instances=0 \
             --memory=1Gi \
             --cpu=1 \
+            --cpu-throttling \
             --cpu-boost \
             --timeout=60 \
             --set-env-vars="CMS_URL=${{ secrets.CMS_URL }}" \
