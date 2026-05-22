@@ -4,9 +4,13 @@ import { getTenantLanguages } from '../lib/cms-client.js'
 import {
   CDN_XML_S_MAXAGE,
   isCdnManagedPath,
+  tryEarlyHtml304,
   withCdnHtmlCache,
   withCdnPublicAssetCache,
 } from '../lib/cdn-cache.js'
+import { getPublishedContentVersion } from '../lib/content-version-store.js'
+import { getHomePageSlug } from '../lib/home-page.js'
+import { resolveContentRoute } from '../lib/resolve-content-route.js'
 import { getRequestHostname } from '../lib/request-hostname.js'
 
 /**
@@ -97,6 +101,48 @@ const tenantResolver = defineMiddleware(async (context, next) => {
 })
 
 /**
+ * 304 temprano con versión en BD: evita SSR y llamadas al CMS si If-None-Match coincide.
+ */
+const earlyDbRevalidate = defineMiddleware(async (context, next) => {
+  const { request, url, locals } = context
+  const pathname = url.pathname
+
+  if (request.method !== 'GET') return next()
+  if (!isCdnManagedPath(pathname)) return next()
+
+  const accept = request.headers.get('accept') ?? ''
+  if (!accept.includes('text/html')) return next()
+
+  const tenant = locals.tenant
+  const hostname = locals.hostname
+  if (!tenant || !hostname) return next()
+
+  const contentRoute = resolveContentRoute(pathname, {
+    availableLanguages: locals.availableLanguages,
+    homePageSlug: getHomePageSlug(tenant),
+  })
+  if (!contentRoute) return next()
+
+  locals.contentRouteKey = contentRoute
+
+  const contentVersion = await getPublishedContentVersion(tenant.id, contentRoute)
+  if (contentVersion == null) return next()
+
+  locals.publishedContentVersion = contentVersion
+
+  const early304 = tryEarlyHtml304({
+    hostname,
+    tenantId: tenant.id,
+    pathname,
+    contentVersion,
+    ifNoneMatch: request.headers.get('if-none-match'),
+  })
+  if (early304) return early304
+
+  return next()
+})
+
+/**
  * Cabeceras Cache-Control / Vary / ETag para Firebase CDN (req. 14.4).
  * HTML y sitemap/robots cacheables por host; APIs y errores sin store.
  */
@@ -126,7 +172,18 @@ const cdnCacheHeaders = defineMiddleware(async (context, next) => {
   const pathname = context.url.pathname
 
   if (contentType.includes('text/html')) {
-    return withCdnHtmlCache(response, { hostname, tenantId, pathname, ifNoneMatch })
+    let contentVersion = context.locals.publishedContentVersion
+    if (contentVersion === undefined && tenantId && context.locals.contentRouteKey) {
+      contentVersion =
+        (await getPublishedContentVersion(tenantId, context.locals.contentRouteKey)) ?? undefined
+    }
+    return withCdnHtmlCache(response, {
+      hostname,
+      tenantId,
+      pathname,
+      ifNoneMatch,
+      contentVersion,
+    })
   }
 
   if (contentType.includes('application/xml')) {
@@ -152,7 +209,7 @@ const cdnCacheHeaders = defineMiddleware(async (context, next) => {
   return response
 })
 
-export const onRequest = sequence(tenantResolver, cdnCacheHeaders)
+export const onRequest = sequence(tenantResolver, earlyDbRevalidate, cdnCacheHeaders)
 
 // Extender tipos de Astro locals
 declare global {
@@ -162,6 +219,8 @@ declare global {
       hostname: string
       primaryLanguage: string
       availableLanguages: string[]
+      contentRouteKey?: import('../lib/resolve-content-route.js').ContentRouteKey
+      publishedContentVersion?: number
     }
   }
 }

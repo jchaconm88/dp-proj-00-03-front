@@ -50,13 +50,14 @@ export function isCdnManagedPath(pathname: string): boolean {
   return true
 }
 
-/** ETag por tenant + ruta; al publicar sube la versión y cambia en todas las URLs del tenant. */
+/** ETag por tenant + ruta; usa versión de BD si se pasa, si no versión en memoria del tenant. */
 export function buildPageEtag(
   hostname: string,
   tenantId: string,
   pathname: string,
+  contentVersion?: number,
 ): string {
-  const version = getTenantCdnVersion(tenantId)
+  const version = contentVersion ?? getTenantCdnVersion(tenantId)
   const path = pathname || '/'
   return `W/"${tenantId}-v${version}-${hostname}-${path}"`
 }
@@ -81,7 +82,7 @@ function cloneWithHeaders(response: Response, mutate: (headers: Headers) => void
   })
 }
 
-function htmlCacheControl(): string {
+export function htmlCacheControl(): string {
   if (getCdnHtmlCacheMode() === 'edge-ttl') {
     const max = getCdnHtmlSMaxAge()
     return `public, s-maxage=${max}, max-age=${max}, stale-while-revalidate=${CDN_HTML_STALE_WHILE_REVALIDATE}`
@@ -94,13 +95,41 @@ export type CdnHtmlCacheOptions = {
   tenantId?: string
   pathname: string
   ifNoneMatch?: string | null
+  /** Versión desde published_content_versions; si no, memoria del tenant. */
+  contentVersion?: number
+}
+
+export type EarlyHtml304Options = {
+  hostname: string
+  tenantId: string
+  pathname: string
+  contentVersion: number
+  ifNoneMatch: string | null
+}
+
+/** 304 temprano (middleware) sin renderizar la página. */
+export function tryEarlyHtml304(options: EarlyHtml304Options): Response | null {
+  const { hostname, tenantId, pathname, contentVersion, ifNoneMatch } = options
+  if (!ifNoneMatch) return null
+
+  const etag = buildPageEtag(hostname, tenantId, pathname, contentVersion)
+  if (!etagMatches(ifNoneMatch, etag)) return null
+
+  return new Response(null, {
+    status: 304,
+    headers: {
+      ETag: etag,
+      Vary: VARY_HOST,
+      'Cache-Control': htmlCacheControl(),
+    },
+  })
 }
 
 /**
  * HTML 200: cache CDN con invalidación por versión de tenant (webhook / POST rebuild).
  */
 export function withCdnHtmlCache(response: Response, options: CdnHtmlCacheOptions): Response {
-  const { hostname, tenantId, pathname, ifNoneMatch } = options
+  const { hostname, tenantId, pathname, ifNoneMatch, contentVersion } = options
 
   if (response.status !== 200) {
     return cloneWithHeaders(response, (h) => {
@@ -115,7 +144,7 @@ export function withCdnHtmlCache(response: Response, options: CdnHtmlCacheOption
     })
   }
 
-  const etag = buildPageEtag(hostname, tenantId, pathname)
+  const etag = buildPageEtag(hostname, tenantId, pathname, contentVersion)
 
   if (ifNoneMatch && etagMatches(ifNoneMatch, etag)) {
     return new Response(null, {

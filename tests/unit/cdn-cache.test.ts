@@ -3,6 +3,7 @@ import {
   bumpTenantCdnVersion,
   buildPageEtag,
   resetTenantCdnVersions,
+  tryEarlyHtml304,
   withCdnHtmlCache,
   withCdnPublicAssetCache,
 } from '../../src/lib/cdn-cache.js'
@@ -35,6 +36,30 @@ describe('cdn-cache', () => {
     })
     expect(res.status).toBe(304)
     expect(res.headers.get('ETag')).toBe(etag)
+  })
+
+  it('usa contentVersion explícito en ETag', () => {
+    const etag = buildPageEtag('a.com', 't1', '/es/', 1710000000000)
+    expect(etag).toBe('W/"t1-v1710000000000-a.com-/es/"')
+    const res = withCdnHtmlCache(new Response('body', { status: 200 }), {
+      hostname: 'a.com',
+      tenantId: 't1',
+      pathname: '/es/',
+      contentVersion: 1710000000000,
+      ifNoneMatch: etag,
+    })
+    expect(res.status).toBe(304)
+  })
+
+  it('tryEarlyHtml304 devuelve 304 cuando coincide', () => {
+    const res = tryEarlyHtml304({
+      hostname: 'a.com',
+      tenantId: 't1',
+      pathname: '/es/about',
+      contentVersion: 42,
+      ifNoneMatch: buildPageEtag('a.com', 't1', '/es/about', 42),
+    })
+    expect(res?.status).toBe(304)
   })
 
   it('cambia ETag al incrementar versión del tenant', () => {

@@ -20,6 +20,7 @@ Inyectados como **build-args** (quedan en `import.meta.env` del bundle Astro):
 | `TURNSTILE_SITE_KEY` | Clave pública Turnstile |
 | `WEBHOOK_SECRET` | Firma webhook rebuild |
 | `TURNSTILE_SECRET_KEY` | Validación CAPTCHA en `/api/contact` |
+| `DATABASE_URL` | Runtime Cloud Run — mismo `app_user` que el CMS (`terraform output -raw neon_database_connection_string`). Solo `SELECT` en `published_content_versions` para ETag/304 temprano. |
 
 ## Firebase Hosting
 
@@ -40,9 +41,11 @@ Tras el primer deploy del front:
 ## Orden de despliegue inicial
 
 1. `terraform apply` en infra (módulos `firebase_hosting` + `cloud_run_front`).
-2. Push a **back** (`main`) → CMS en Cloud Run.
-3. Configurar secretos del **front** (tabla anterior).
+2. Push a **back** (`main`) → migración `published_content_versions` + CMS en Cloud Run.
+3. Configurar secretos del **front** (tabla anterior), incluido `DATABASE_URL`.
 4. Push a **front** (`main`) → imagen → Cloud Run → Hosting.
+
+Tras publicar contenido en el CMS, el front puede responder **304** sin llamar al CMS si `If-None-Match` coincide con la versión en BD.
 
 ## Verificación
 

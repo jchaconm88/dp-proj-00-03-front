@@ -112,6 +112,7 @@ Configurar en **Settings → Secrets and variables → Actions** del repo `dp-pr
 | `GCP_REGION` | deploy | Región Cloud Run y rewrite Firebase (`us-central1`). |
 | `FIREBASE_PROJECT_ID` | deploy | Igual que `GCP_PROJECT_ID`. |
 | `FIREBASE_HOSTING_SITE` | deploy | `terraform output -raw firebase_hosting_site`. |
+| `DATABASE_URL` | deploy | Mismo `app_user` que el CMS — versiones publicadas para ETag/304. |
 
 Detalle: [`.github/SECRETS.md`](./.github/SECRETS.md).
 
