@@ -1,4 +1,4 @@
-import type { Tenant, Domain, Page, Post, Menu, TenantLanguage } from '../types/api.js'
+import type { Tenant, Page, Post, Menu, TenantLanguage } from '../types/api.js'
 import { cache, CACHE_TTL } from './cache.js'
 import { getCmsUrl } from './cms-url.js'
 
@@ -27,6 +27,11 @@ async function fetchCMS<T>(path: string, options?: RequestInit): Promise<T> {
   } finally {
     clearTimeout(timeoutId)
   }
+}
+
+function readContentCache<T>(key: string): T | undefined {
+  const hit = cache.get<T>(key)
+  return hit ? hit.data : undefined
 }
 
 export type TenantResolutionResult =
@@ -84,10 +89,13 @@ export async function resolveTenantByHostname(hostname: string): Promise<TenantR
 
 /**
  * Obtiene el contenido de una pagina por tenant y slug.
- * Req 15.1, 15.4: fallback a cache de hasta 24h
+ * Req 15.1, 15.4: cache 24h; invalidación vía webhook.
  */
 export async function getPage(tenantId: string, slug: string, lang: string): Promise<Page | null> {
   const cacheKey = `page:${tenantId}:${slug}:${lang}`
+
+  const cached = readContentCache<Page>(cacheKey)
+  if (cached !== undefined) return cached
 
   try {
     const result = await fetchCMS<{ docs: Page[] }>(
@@ -109,6 +117,9 @@ export async function getPage(tenantId: string, slug: string, lang: string): Pro
 export async function getPosts(tenantId: string): Promise<Post[]> {
   const cacheKey = `posts:${tenantId}`
 
+  const cached = readContentCache<Post[]>(cacheKey)
+  if (cached !== undefined) return cached
+
   try {
     const result = await fetchCMS<{ docs: Post[] }>(
       `/posts?where[tenant][equals]=${tenantId}&where[status][equals]=published&sort=-publishDate&limit=100`,
@@ -126,6 +137,9 @@ export async function getPosts(tenantId: string): Promise<Post[]> {
  */
 export async function getPost(tenantId: string, slug: string): Promise<Post | null> {
   const cacheKey = `post:${tenantId}:${slug}`
+
+  const cached = readContentCache<Post>(cacheKey)
+  if (cached !== undefined) return cached
 
   try {
     const result = await fetchCMS<{ docs: Post[] }>(
@@ -146,6 +160,9 @@ export async function getPost(tenantId: string, slug: string): Promise<Post | nu
 export async function getMenu(tenantId: string, location: string): Promise<Menu | null> {
   const cacheKey = `menu:${tenantId}:${location}`
 
+  const cached = readContentCache<Menu>(cacheKey)
+  if (cached !== undefined) return cached
+
   try {
     const result = await fetchCMS<{ docs: Menu[] }>(
       `/menus?where[tenant][equals]=${tenantId}&where[location][equals]=${location}&depth=1`,
@@ -165,6 +182,9 @@ export async function getMenu(tenantId: string, location: string): Promise<Menu 
 export async function getTenantLanguages(tenantId: string): Promise<TenantLanguage[]> {
   const cacheKey = `languages:${tenantId}`
 
+  const cached = readContentCache<TenantLanguage[]>(cacheKey)
+  if (cached !== undefined) return cached
+
   try {
     const result = await fetchCMS<{ docs: TenantLanguage[] }>(
       `/tenant-languages?where[tenant][equals]=${tenantId}`,
@@ -182,6 +202,9 @@ export async function getTenantLanguages(tenantId: string): Promise<TenantLangua
  */
 export async function getAllPublishedPages(tenantId: string): Promise<Page[]> {
   const cacheKey = `all-pages:${tenantId}`
+
+  const cached = readContentCache<Page[]>(cacheKey)
+  if (cached !== undefined) return cached
 
   try {
     const result = await fetchCMS<{ docs: Page[] }>(

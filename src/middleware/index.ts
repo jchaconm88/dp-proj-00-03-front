@@ -10,22 +10,19 @@ import {
 } from '../lib/cdn-cache.js'
 import { getPublishedContentVersion } from '../lib/content-version-store.js'
 import { getHomePageSlug } from '../lib/home-page.js'
-import { resolveContentRoute } from '../lib/resolve-content-route.js'
+import {
+  fallbackLanguagesFromPath,
+  resolveContentRoute,
+} from '../lib/resolve-content-route.js'
 import { getRequestHostname } from '../lib/request-hostname.js'
 
 /**
- * Middleware de resolución de tenant por hostname.
+ * Resolución de tenant por hostname (sin idiomas del CMS).
  * Requisito 2.2, 1.3, 15.3, 15.6 — Property 7
- *
- * - Extrae el hostname (x-forwarded-host en Firebase Hosting, Host en local)
- * - Consulta la API del CMS para resolver el tenant activo
- * - Retorna 404 para dominios no registrados (sin exponer info de otros tenants)
- * - Retorna 503 para tenants desactivados
  */
-const tenantResolver = defineMiddleware(async (context, next) => {
+const tenantCore = defineMiddleware(async (context, next) => {
   const hostname = getRequestHostname(context.request)
 
-  // Rutas internas no requieren resolución de tenant
   const isInternalRoute =
     context.url.pathname === '/api/health' ||
     context.url.pathname.startsWith('/api/webhooks') ||
@@ -36,7 +33,6 @@ const tenantResolver = defineMiddleware(async (context, next) => {
     return next()
   }
 
-  // Corregir /es/es/... (redirect 301 antiguo en caché del navegador)
   const duplicateLang = context.url.pathname.match(/^\/([a-z]{2})\/\1(\/.*)?$/)
   if (duplicateLang) {
     const fixedPath = `/${duplicateLang[1]}${duplicateLang[2] ?? ''}`
@@ -79,29 +75,15 @@ const tenantResolver = defineMiddleware(async (context, next) => {
     return context.redirect(`/${lang}/`, 302)
   }
 
-  // Obtener idiomas configurados del tenant
-  const languages = await getTenantLanguages(tenant.id)
-  const primaryLanguage = (
-    languages.find((l) => l.isPrimary)?.languageCode ?? tenant.defaultLanguage
-  )
-    .trim()
-    .toLowerCase()
-  const availableLanguages =
-    languages.length > 0
-      ? languages.map((l) => l.languageCode.trim().toLowerCase())
-      : [primaryLanguage]
-
-  // Exponer tenant en locals para las páginas
   context.locals.tenant = tenant
   context.locals.hostname = hostname
-  context.locals.primaryLanguage = primaryLanguage
-  context.locals.availableLanguages = availableLanguages
 
   return next()
 })
 
 /**
  * 304 temprano con versión en BD: evita SSR y llamadas al CMS si If-None-Match coincide.
+ * Usa idiomas inferidos del path (sin getTenantLanguages) para no bloquear el 304.
  */
 const earlyDbRevalidate = defineMiddleware(async (context, next) => {
   const { request, url, locals } = context
@@ -117,8 +99,12 @@ const earlyDbRevalidate = defineMiddleware(async (context, next) => {
   const hostname = locals.hostname
   if (!tenant || !hostname) return next()
 
+  const availableLanguages =
+    locals.availableLanguages ??
+    fallbackLanguagesFromPath(tenant.defaultLanguage, pathname)
+
   const contentRoute = resolveContentRoute(pathname, {
-    availableLanguages: locals.availableLanguages,
+    availableLanguages,
     homePageSlug: getHomePageSlug(tenant),
   })
   if (!contentRoute) return next()
@@ -142,9 +128,30 @@ const earlyDbRevalidate = defineMiddleware(async (context, next) => {
   return next()
 })
 
+/** Idiomas del tenant desde CMS (después del 304 temprano). */
+const tenantLanguages = defineMiddleware(async (context, next) => {
+  const tenant = context.locals.tenant
+  if (!tenant) return next()
+
+  const languages = await getTenantLanguages(tenant.id)
+  const primaryLanguage = (
+    languages.find((l) => l.isPrimary)?.languageCode ?? tenant.defaultLanguage
+  )
+    .trim()
+    .toLowerCase()
+  const availableLanguages =
+    languages.length > 0
+      ? languages.map((l) => l.languageCode.trim().toLowerCase())
+      : [primaryLanguage]
+
+  context.locals.primaryLanguage = primaryLanguage
+  context.locals.availableLanguages = availableLanguages
+
+  return next()
+})
+
 /**
  * Cabeceras Cache-Control / Vary / ETag para Firebase CDN (req. 14.4).
- * HTML y sitemap/robots cacheables por host; APIs y errores sin store.
  */
 const cdnCacheHeaders = defineMiddleware(async (context, next) => {
   const response = await next()
@@ -209,16 +216,15 @@ const cdnCacheHeaders = defineMiddleware(async (context, next) => {
   return response
 })
 
-export const onRequest = sequence(tenantResolver, earlyDbRevalidate, cdnCacheHeaders)
+export const onRequest = sequence(tenantCore, earlyDbRevalidate, tenantLanguages, cdnCacheHeaders)
 
-// Extender tipos de Astro locals
 declare global {
   namespace App {
     interface Locals {
       tenant: import('../types/api.js').Tenant
       hostname: string
-      primaryLanguage: string
-      availableLanguages: string[]
+      primaryLanguage?: string
+      availableLanguages?: string[]
       contentRouteKey?: import('../lib/resolve-content-route.js').ContentRouteKey
       publishedContentVersion?: number
     }

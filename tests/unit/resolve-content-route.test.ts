@@ -1,5 +1,8 @@
 import { describe, it, expect } from 'vitest'
-import { resolveContentRoute } from '../../src/lib/resolve-content-route.js'
+import {
+  fallbackLanguagesFromPath,
+  resolveContentRoute,
+} from '../../src/lib/resolve-content-route.js'
 
 const langs = ['es', 'en']
 
@@ -38,5 +41,19 @@ describe('resolveContentRoute', () => {
     expect(
       resolveContentRoute('/sitemap.xml', { availableLanguages: langs, homePageSlug: 'home' }),
     ).toBeNull()
+  })
+})
+
+describe('fallbackLanguagesFromPath', () => {
+  it('usa solo el idioma por defecto si el path no lleva prefijo', () => {
+    expect(fallbackLanguagesFromPath('es', '/api/x')).toEqual(['es'])
+  })
+
+  it('incluye idioma del path si difiere del defecto', () => {
+    expect(fallbackLanguagesFromPath('es', '/en/about')).toEqual(['en', 'es'])
+  })
+
+  it('no duplica si el path coincide con el defecto', () => {
+    expect(fallbackLanguagesFromPath('es', '/es/about')).toEqual(['es'])
   })
 })

@@ -5,6 +5,18 @@ export type ContentRouteKey = {
 
 const LANG_PATH_RE = /^\/([a-z]{2})(?:\/(.*))?$/
 
+/** Idiomas mínimos para 304 temprano sin llamar al CMS por tenant-languages. */
+export function fallbackLanguagesFromPath(
+  defaultLanguage: string | undefined,
+  pathname: string,
+): string[] {
+  const defaultLang = (defaultLanguage?.trim().toLowerCase() || 'es')
+  const match = pathname.match(/^\/([a-z]{2})(?:\/|$)/)
+  const fromPath = match?.[1]
+  if (!fromPath || fromPath === defaultLang) return [defaultLang]
+  return [fromPath, defaultLang]
+}
+
 /**
  * Mapea pathname público a clave (collection, slug) para versiones en BD.
  * Alineado con [lang]/[...slug].astro (home, blog, slug vacío).
