@@ -19,6 +19,7 @@ import { generateMetaTags, generateHreflangTags, generateSchemaOrg } from '../..
 import { resolveLanguage } from '../../lib/i18n.js'
 
 import { richTextToHtml } from '../../lib/rich-text.js'
+import { optimizeImagesInHtml } from '../../lib/optimize-html-images.js'
 
 import {
 
@@ -193,7 +194,7 @@ const schemaOrg = generateSchemaOrg({
 
 const homeUrl = `${Astro.url.origin}/${currentLang}/`
 
-const contentHtml = richTextToHtml(translation.content)
+const contentHtml = optimizeImagesInHtml(richTextToHtml(translation.content))
 
 const pageTemplateId = contentType === 'page' ? (content as Page).templateId : null
 

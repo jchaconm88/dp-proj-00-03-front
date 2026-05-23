@@ -8,6 +8,8 @@ import { resolveMediaInTemplateData } from './template-media.ts'
 import { mergeMenuIntegrations } from './template-menus.ts'
 import { enrichTemplateDataWithProductCatalogs } from './template-products.ts'
 import { getCmsUrl } from './cms-url.js'
+import { optimizeImagesInHtml } from './optimize-html-images.js'
+import { buildResourceHintsHtml } from './resource-hints.js'
 
 const CMS_URL = getCmsUrl()
 const CMS_TIMEOUT_MS = 5000
@@ -147,7 +149,8 @@ export async function processTemplate(
   }
 
   result = substitutePlaceholders(result, vars)
-  return rewriteRelativeAssetUrls(result, baseUrl)
+  result = rewriteRelativeAssetUrls(result, baseUrl)
+  return optimizeImagesInHtml(result)
 }
 
 /** @deprecated Usar processTemplate con ProcessTemplateOptions */
@@ -161,7 +164,9 @@ export function processTemplateSync(
 }
 
 export function injectSeo(html: string, meta: MetaTags, language: string): string {
+  const resourceHints = buildResourceHintsHtml()
   const seoBlock = `
+${resourceHints}
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>${escapeHtml(meta.title)}</title>

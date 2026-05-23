@@ -14,6 +14,10 @@ export interface CatalogProductItem {
   ctaLabel?: string
   href?: string
   imageUrl?: string | null
+  imageSrcset?: string
+  imageSizes?: string
+  imageWidth?: number
+  imageHeight?: number
 }
 
 async function fetchProductsByCategory(

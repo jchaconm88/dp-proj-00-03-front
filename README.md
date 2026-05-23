@@ -23,6 +23,13 @@ dominio-b.com ─┼──→ Firebase Hosting (1 sitio) ──→ Astro SSR ─
 dominio-c.com ─┘
 ```
 
+### Rendimiento de imágenes (req. 6.3, 6.6)
+
+- **Variantes WebP** del CMS (`small` / `medium` / `large`) expuestas vía `template-media` y API de productos.
+- **Post-procesado HTML** (`optimize-html-images.ts`): `fetchpriority="high"` en hero/LCP, `loading="lazy"` below-fold, `srcset` derivado, `decoding="async"`.
+- **Preconnect** al CMS y GCS en `BaseLayout` y plantillas (`injectSeo`).
+- Tras actualizar partials en `dp-proj-00-03-templates`, **re-sincronizar** la plantilla activa en el CMS para que el HTML incluya `srcset`/`sizes`.
+
 ## Dependencias externas
 
 | Repositorio | Interface consumida | Versión mínima | Protocolo |

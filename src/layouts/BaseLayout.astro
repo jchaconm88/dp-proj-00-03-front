@@ -1,5 +1,6 @@
 ---
 import type { MetaTags, HreflangEntry } from '../types/index.ts'
+import { buildResourceHintsHtml } from '../lib/resource-hints.js'
 
 interface Props {
   meta: MetaTags
@@ -11,6 +12,7 @@ interface Props {
 
 const { meta, hreflang = [], schemaOrg = null, language, tenant } = Astro.props
 const turnstiteSiteKey = import.meta.env.TURNSTILE_SITE_KEY ?? ''
+const resourceHintsHtml = buildResourceHintsHtml()
 ---
 
 <!DOCTYPE html>
@@ -54,7 +56,7 @@ const turnstiteSiteKey = import.meta.env.TURNSTILE_SITE_KEY ?? ''
     )}
 
     <!-- Preconnect para performance -->
-    <link rel="preconnect" href="https://storage.googleapis.com" />
+    <Fragment set:html={resourceHintsHtml} />
 
     <slot name="head" />
   </head>

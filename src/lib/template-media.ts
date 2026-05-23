@@ -1,26 +1,29 @@
 import type { TemplateBlockData } from '../types/template.ts'
+import { cache, CACHE_TTL } from './cache.js'
 import { getCmsUrl } from './cms-url.js'
+import {
+  buildMediaImageProps,
+  type PayloadMediaDoc,
+} from './media-image-props.js'
 
 const CMS_URL = getCmsUrl()
 
-const mediaUrlCache = new Map<string, string>()
-
-async function fetchMediaUrl(mediaId: string): Promise<string | null> {
-  const cached = mediaUrlCache.get(mediaId)
-  if (cached) return cached
+async function fetchMediaDoc(mediaId: string): Promise<PayloadMediaDoc | null> {
+  const cacheKey = `media:doc:${mediaId}`
+  const cached = cache.get<PayloadMediaDoc>(cacheKey)
+  if (cached) return cached.data
 
   try {
     const response = await fetch(`${CMS_URL}/api/media/${encodeURIComponent(mediaId)}?depth=0`, {
       headers: { 'Content-Type': 'application/json' },
     })
     if (!response.ok) return null
-    const doc = (await response.json()) as { url?: string }
-    if (!doc.url) return null
-    const absolute = doc.url.startsWith('http') ? doc.url : `${CMS_URL}${doc.url}`
-    mediaUrlCache.set(mediaId, absolute)
-    return absolute
+    const doc = (await response.json()) as PayloadMediaDoc
+    cache.set(cacheKey, doc, CACHE_TTL.CONTENT)
+    return doc
   } catch {
-    return null
+    const stale = cache.getStale<PayloadMediaDoc>(cacheKey, CACHE_TTL.STALE_MAX)
+    return stale?.data ?? null
   }
 }
 
@@ -34,8 +37,22 @@ async function resolveValue(value: unknown): Promise<unknown> {
   if (typeof value === 'object') {
     const obj = value as Record<string, unknown>
     if ('mediaId' in obj && (typeof obj.mediaId === 'string' || typeof obj.mediaId === 'number')) {
-      const url = await fetchMediaUrl(String(obj.mediaId))
-      return { ...obj, url: url ?? '' }
+      const doc = await fetchMediaDoc(String(obj.mediaId))
+      if (!doc) return { ...obj, url: '' }
+
+      const props = buildMediaImageProps(doc, CMS_URL)
+      if (!props) return { ...obj, url: '' }
+
+      return {
+        ...obj,
+        url: props.url,
+        imageUrl: props.imageUrl,
+        ...(props.imageSrcset ? { imageSrcset: props.imageSrcset } : {}),
+        imageSizes: props.imageSizes,
+        ...(props.imageWidth != null ? { imageWidth: props.imageWidth } : {}),
+        ...(props.imageHeight != null ? { imageHeight: props.imageHeight } : {}),
+        ...(props.imageAlt && !obj['imageAlt'] ? { imageAlt: props.imageAlt } : {}),
+      }
     }
     const out: Record<string, unknown> = {}
     for (const [k, v] of Object.entries(obj)) {
